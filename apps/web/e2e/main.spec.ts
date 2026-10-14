@@ -152,7 +152,7 @@ test('マスタ：セルを書き換えて Tab を押すと、右のセルへ移
 
 test('入出力：みどり川電鉄（鉄道）を生成すると、駅別の収支が金額の構成に出る', async ({ page }) => {
   await page.getByRole('button', { name: '入出力' }).click();
-  await page.getByRole('button', { name: 'みどり川電鉄（鉄道）を生成' }).click();
+  await page.getByRole('button', { name: 'みどり川電鉄（鉄道）' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
   await page.getByRole('button', { name: '締め検討' }).click();
   await page.getByRole('button', { name: '金額の構成', exact: true }).click();
@@ -162,3 +162,20 @@ test('入出力：みどり川電鉄（鉄道）を生成すると、駅別の�
   await page.getByRole('tab', { name: '集計' }).click();
   await expect(page.getByText('ゼロサム検査：一致')).toBeVisible();
 });
+
+for (const [name, row] of [
+  ['さざなみ電力（電力・社内カンパニー制）', /^送配電カンパニー（託送） /],
+  ['みずなぎコンサルティング（ITコンサル）', /^C-102 金融B社 S\/4HANA移行 /],
+] as const) {
+  test(`入出力：${name}を生成すると、エラーなく締まり、金額の構成にゴールが出る`, async ({ page }) => {
+    await page.getByRole('button', { name: '入出力' }).click();
+    await page.getByRole('button', { name }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+    await page.getByRole('button', { name: '締め検討' }).click();
+    await page.getByRole('tab', { name: '集計' }).click();
+    await expect(page.getByText('ゼロサム検査：一致')).toBeVisible();
+    await page.getByRole('button', { name: '金額の構成', exact: true }).click();
+    await page.getByRole('button', { name: '最初にどこで計上されたか', exact: true }).click();
+    await expect(page.getByRole('button', { name: row })).toBeVisible();
+  });
+}

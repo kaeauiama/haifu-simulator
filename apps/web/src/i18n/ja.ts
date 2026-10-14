@@ -2,7 +2,7 @@
  * 画面の文言（CLAUDE.md：画面の文言はここに集める）。
  * 検証メッセージの既定文言はエンジンの ISSUE_DEFS が持つ。
  */
-import type { AccountCategory, CompositionMode, CostCenter, Method, ObjTier, ObjType, PartKind, RuleKind, Severity, StepKind, ViewMethod, WBSElement, WeightBasis } from '@alloc-sim/engine';
+import type { AccountCategory, CompositionMode, CostCenter, Method, ObjTier, ObjType, PartKind, RuleKind, SampleId, Severity, StepKind, ViewMethod, WBSElement, WeightBasis } from '@alloc-sim/engine';
 
 export const ja = {
   app: {
@@ -20,14 +20,10 @@ export const ja = {
     redo: 'やり直す',
     saveJson: 'JSONで保存',
     loadJson: 'JSONを読み込む',
-    resetSample: 'サンプル商事を生成',
-    resetRailway: 'みどり川電鉄（鉄道）を生成',
     presentationOn: '発表モード：オン',
     presentationOff: '発表モード：オフ',
     savedAt: (t: string) => `自動保存 ${t}`,
     notSaved: '未保存',
-    confirmReset: 'サンプル商事を読み込みます。いまのデータは置き換わります。',
-    confirmRailway: 'みどり川電鉄（架空の鉄道会社）を読み込みます。いまのデータは置き換わります。',
     confirmDeleteScenario: (name: string) => `シナリオ「${name}」を削除します。`,
     loadError: 'JSONを読み込めませんでした',
     renamePrompt: 'シナリオの名前',
@@ -401,6 +397,14 @@ export const ja = {
     journal: '仕訳（CSV）',
     exportJournal: 'CSVで書き出す',
     scenario: 'シナリオ',
+    samples: 'サンプルを生成',
+    sample: {
+      company: 'サンプル商事',
+      railway: 'みどり川電鉄（鉄道）',
+      utility: 'さざなみ電力（電力・社内カンパニー制）',
+      consulting: 'みずなぎコンサルティング（ITコンサル）',
+    } satisfies Record<SampleId, string>,
+    confirmSample: (name: string) => `${name}を読み込みます。いまのデータは置き換わります。`,
   },
   dialog: { ok: 'OK', cancel: 'キャンセル', close: '閉じる' },
 } as const;

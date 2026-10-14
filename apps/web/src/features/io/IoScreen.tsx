@@ -2,8 +2,8 @@
  * 入出力（6章「出力」）。プロジェクト JSON（F9-01）、設定一覧の Excel（F9-03）、仕訳の CSV（F9-04）。
  * ファイルはブラウザの中で作って手元に保存する。外には送らない。
  */
-import { parseProjectJson, railwayProject, sampleProject, serializeProject, settingsTables, type Project } from '@alloc-sim/engine';
-import { Download, FileDown, FolderOpen, RotateCcw, TrainFront } from 'lucide-react';
+import { SAMPLE_IDS, SAMPLE_PROJECTS, parseProjectJson, serializeProject, settingsTables, type SampleId } from '@alloc-sim/engine';
+import { Download, FileDown, FolderOpen, RotateCcw } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { alertDialog, confirmDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
@@ -51,9 +51,9 @@ export function IoScreen() {
     setUi({ cursor: null, selectedObj: null, selectedStepId: null });
   };
 
-  const loadSample = async (message: string, make: () => Project) => {
-    if (!(await confirmDialog(message))) return;
-    replace(make());
+  const loadSample = async (id: SampleId) => {
+    if (!(await confirmDialog(ja.io.confirmSample(ja.io.sample[id])))) return;
+    replace(SAMPLE_PROJECTS[id]());
     setUi({ cursor: null, selectedObj: null, selectedStepId: null });
   };
 
@@ -68,14 +68,14 @@ export function IoScreen() {
           <FolderOpen />
           {ja.header.loadJson}
         </Button>
-        <Button variant="ghost" onClick={() => loadSample(ja.header.confirmReset, sampleProject)}>
-          <RotateCcw />
-          {ja.header.resetSample}
-        </Button>
-        <Button variant="ghost" onClick={() => loadSample(ja.header.confirmRailway, railwayProject)}>
-          <TrainFront />
-          {ja.header.resetRailway}
-        </Button>
+      </Section>
+      <Section title={ja.io.samples}>
+        {SAMPLE_IDS.map((id) => (
+          <Button key={id} variant="outline" onClick={() => loadSample(id)}>
+            <RotateCcw />
+            {ja.io.sample[id]}
+          </Button>
+        ))}
       </Section>
       <Section title={ja.io.settings}>
         <label className="text-sm text-muted-foreground" htmlFor="io-scenario">

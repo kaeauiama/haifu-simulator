@@ -2,7 +2,7 @@
  * 画面なしで結果を確かめる CLI（8.3「M2を終えた時点で、CLIから結果を確かめられる」）。
  *
  *   pnpm sim                                サンプル商事の全シナリオを実行して要約を出す
- *   pnpm sim -- --sample railway            みどり川電鉄（鉄道のサンプル）を使う
+ *   pnpm sim -- --sample railway            ほかのサンプルを使う（railway・utility・consulting。seed/samples.ts）
  *   pnpm sim -- --scenario S-LATE           シナリオを選ぶ
  *   pnpm sim -- --file project.json         プロジェクトJSONを読む（Zodで検査）
  *   pnpm sim -- --journal                   ステップごとの流れ（送信→受信）を出す
@@ -19,8 +19,7 @@ import { ProjectSchema } from './model/schema.ts';
 import type { Issue, Project } from './model/types.ts';
 import { flows, totalsByObject, totalsByProfitCenter, totalsBySegment } from './report/totals.ts';
 import { runAll, type RunResult } from './run.ts';
-import { railwayProject } from './seed/railway.ts';
-import { sampleProject } from './seed/sampleCompany.ts';
+import { SAMPLE_IDS, SAMPLE_PROJECTS, type SampleId } from './seed/samples.ts';
 import { fmtYen } from './validate/issues.ts';
 
 // ---------- 表示の部品 ----------
@@ -45,8 +44,15 @@ const opt = (name: string): string | undefined => {
 };
 const flag = (name: string) => args.includes(name);
 
-/** 同梱のサンプル。--sample railway でみどり川電鉄、ほかはサンプル商事 */
-const builtInSample = (): Project => (opt('--sample') === 'railway' ? railwayProject() : sampleProject());
+/** 同梱のサンプル。--sample で選び、省くとサンプル商事 */
+const builtInSample = (): Project => {
+  const id = opt('--sample') ?? 'company';
+  if (!(SAMPLE_IDS as string[]).includes(id)) {
+    console.error(`--sample には ${SAMPLE_IDS.join(' / ')} のどれかを指定してください：${id}`);
+    process.exit(1);
+  }
+  return SAMPLE_PROJECTS[id as SampleId]();
+};
 
 function loadProject(): Project {
   const file = opt('--file');
