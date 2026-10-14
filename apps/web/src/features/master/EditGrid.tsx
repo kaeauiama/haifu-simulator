@@ -4,13 +4,17 @@ import { DataTable, type Col } from '@/components/DataTable';
 import { Button } from '@/components/ui/button';
 import { ja } from '@/i18n/ja';
 
-/** 編集できる表。行の追加・削除ボタンを付ける */
+const byIndex = (_: unknown, i: number) => String(i);
+
+/**
+ * 編集できる表。行の追加・削除ボタンを付ける。
+ * 行は並び順で見分ける。識別子を書き換えても入力欄が作り直されず、Tab で右のセルへ移れる
+ */
 export function EditGrid<T extends object>({
   title,
   note,
   rows,
   cols,
-  rowKey,
   onAdd,
   onDelete,
   toolbar,
@@ -19,7 +23,6 @@ export function EditGrid<T extends object>({
   note?: ReactNode;
   rows: T[];
   cols: Col<T>[];
-  rowKey: (row: T, index: number) => string;
   onAdd?: () => void;
   onDelete?: (row: T, index: number) => void;
   toolbar?: ReactNode;
@@ -62,7 +65,7 @@ export function EditGrid<T extends object>({
       )}
       {note && <p className="text-xs text-muted-foreground">{note}</p>}
       <div className="overflow-auto rounded-md border">
-        <DataTable rows={rows} cols={all} rowKey={rowKey} empty={ja.table.empty} stickyHeader />
+        <DataTable rows={rows} cols={all} rowKey={byIndex} empty={ja.table.empty} stickyHeader />
       </div>
     </section>
   );

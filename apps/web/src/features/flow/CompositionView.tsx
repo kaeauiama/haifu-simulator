@@ -1,6 +1,7 @@
 /**
- * 金額の構成（D-046）。選んだ時点で各対象に溜まっている残高を、直課・どこ由来の額・配った分に分けて、
- * 横の積み上げ棒で見せる。ゼロを中心に、プラスは右、マイナス（配った分・売上など）は左へ積む。
+ * 金額の構成（D-046、D-048）。選んだ時点で各対象に溜まっている残高を、直課・売上・どこから来た額・配った額に分けて、
+ * 横の積み上げ棒で見せる。ゼロを中心に、借方（費用・受け取った額）は右、貸方（収益・配った額）は左へ積む。
+ * 左右の意味は棒の上の見出しで示す。
  * 行は対象の役割（コーポ部門 → 間接部門 → 直接部門 → プロジェクト → ゴール）でまとめる。
  * 額はエンジンが返した値をそのまま使い、ここでは幅への換算だけを行う。
  */
@@ -101,6 +102,8 @@ export function CompositionView() {
     return { k: barW / total, x0: (neg / total) * barW };
   }, [rows, barW]);
 
+  // ゼロの線の位置（左の余白 px-3 ＋ 対象名の列 ＋ 列の間 gap-4 ＋ 棒の中のゼロ）
+  const zeroX = 0.75 * rem + labelW + rem + x0;
   const stepName = summary?.steps.find((s) => s.id === stepId)?.name ?? (stepId === PRIMARY_STEP_ID ? ja.steps.primary : stepId);
   const tiers = TIER_ORDER.filter((t) => rows.some((r) => r.tier === t));
   const seg = (active: boolean) => cn('rounded-md px-2 py-0.5 text-sm whitespace-nowrap', active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted');
@@ -133,6 +136,22 @@ export function CompositionView() {
           ))}
         </div>
       </div>
+
+      {!asTable && rows.length > 0 && (
+        // 左右の意味。ゼロの線を境に、左の見出しは空いている対象名の列へはみ出してよい
+        <div className="relative h-6 shrink-0 border-b text-xs whitespace-nowrap text-muted-foreground">
+          <span className="absolute bottom-1" style={{ right: width - zeroX + 6 }}>
+            {J.credit}
+          </span>
+          <span className="absolute bottom-0 h-2.5 border-l" style={{ left: zeroX }} />
+          <span className="absolute bottom-1" style={{ left: zeroX + 6 }}>
+            {J.debit}
+          </span>
+          <span className="absolute bottom-1 text-right" style={{ right: 0.75 * rem, width: valueW }}>
+            {J.balance}
+          </span>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2" onMouseLeave={() => setHover(null)}>
         {!rows.length && <p className="py-6 text-center text-sm text-muted-foreground">{J.empty}</p>}

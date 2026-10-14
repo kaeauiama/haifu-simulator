@@ -1,5 +1,6 @@
 /**
  * 締め検討のサンキー図（F7-02）。選んだ時点までに実行したステップの流れを描く（1つ進むたびに流れが増える）。
+ * 時点を動かすと、直前の表示から動かし、そのステップで増えた流れを強調する（D-049）
  */
 import { PRIMARY_STEP_ID, type SankeyData } from '@alloc-sim/engine';
 import { useEffect, useState } from 'react';
@@ -31,5 +32,5 @@ export function SankeyView() {
     };
   }, [version, scenario.id, stepKey]);
 
-  return <div className="h-full overflow-auto p-3">{data && <Sankey data={data} />}</div>;
+  return <div className="h-full overflow-auto p-3">{data && <Sankey data={data} animate />}</div>;
 }

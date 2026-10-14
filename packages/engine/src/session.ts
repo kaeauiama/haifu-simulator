@@ -6,7 +6,7 @@
 import { compareRuns } from './compare/compare.ts';
 import { buildMethodView, type MethodView, type ViewMethod } from './graph/methodView.ts';
 import { buildSankey, type SankeyData } from './graph/sankey.ts';
-import { buildComposition, type CompositionMode, type CompositionView } from './graph/composition.ts';
+import { buildComposition, originKeyOf, type CompositionMode, type CompositionView } from './graph/composition.ts';
 import { DISPLAY_LIMITS, topByAmount } from './graph/limits.ts';
 import { journalToCsv } from './io/csv.ts';
 import { describeRules, structuralEdges, type Method, type RuleInfo, type RuleKind } from './graph/rules.ts';
@@ -514,7 +514,7 @@ export class SimSession {
       mi: this.mi,
       steps: new Set(order.slice(0, upTo + 1)),
       cursor: this.snap(stepId),
-      originTracer: () => (this.originTracer ??= new LineageTracer(this.result.ledger, (l) => objKey(l.obj))),
+      originTracer: () => (this.originTracer ??= new LineageTracer(this.result.ledger, originKeyOf(this.mi))),
     });
     return { stepId, ...v };
   }

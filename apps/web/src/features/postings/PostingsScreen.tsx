@@ -83,7 +83,6 @@ export function PostingsScreen() {
           title={`${ja.postings.heading}（${ja.postings.count(postings.length)}）`}
           rows={rows}
           cols={cols}
-          rowKey={(x) => x.id}
           onAdd={() =>
             edit((p) => {
               p.primaryPostings.push({ id: newId(p.primaryPostings.map((x) => x.id), 'PP-'), account: p.master.accounts[0]?.id ?? '', obj: { type: 'CCTR', id: p.master.costCenters[0]?.id ?? '' }, amount: 0 });

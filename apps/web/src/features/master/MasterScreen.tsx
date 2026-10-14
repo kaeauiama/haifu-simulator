@@ -132,7 +132,6 @@ function Accounts() {
     <EditGrid
       rows={m.accounts}
       cols={cols}
-      rowKey={(a) => a.id}
       onAdd={() => edit((p) => void p.master.accounts.push({ id: newId(ids(), 'ACC'), name: '', category: 'PRIMARY' }))}
       onDelete={(a) => deleteChecked('ACCOUNT', a.id, (p) => void (p.master.accounts = p.master.accounts.filter((x) => x.id !== a.id)))}
     />
@@ -157,7 +156,6 @@ function ProfitCenters() {
     <EditGrid
       rows={m.profitCenters}
       cols={cols}
-      rowKey={(x) => x.id}
       onAdd={() => edit((p) => void p.master.profitCenters.push({ id: newId(ids(), 'PC'), name: '' }))}
       onDelete={(x) => deleteChecked('PCTR', x.id, (p) => void (p.master.profitCenters = p.master.profitCenters.filter((y) => y.id !== x.id)))}
     />
@@ -201,7 +199,6 @@ function CostCenters() {
     <EditGrid
       rows={m.costCenters}
       cols={cols}
-      rowKey={(x) => x.id}
       onAdd={() => edit((p) => void p.master.costCenters.push({ id: newId(ids(), 'CC'), name: '', profitCenter: p.master.profitCenters[0]?.id ?? '', kind: 'ADMIN' }))}
       onDelete={(x) => deleteChecked('CCTR', x.id, (p) => void (p.master.costCenters = p.master.costCenters.filter((y) => y.id !== x.id)))}
     />
@@ -242,7 +239,6 @@ function Wbs() {
     <EditGrid
       rows={m.wbs}
       cols={cols}
-      rowKey={(x) => x.id}
       onAdd={() =>
         edit((p) =>
           void p.master.wbs.push({
@@ -279,7 +275,6 @@ function ActivityTypes() {
       title={ja.master.tabs.activityTypes}
       rows={m.activityTypes}
       cols={cols}
-      rowKey={(x) => x.id}
       onAdd={() =>
         edit((p) => void p.master.activityTypes.push({ id: newId(ids(), 'AT'), name: '', unit: '時間', allocAccount: p.master.accounts.find((a) => a.category === 'SEC43')?.id ?? '', rates: [] }))
       }
@@ -329,7 +324,6 @@ function Rates() {
       title={ja.master.tabs.rates}
       rows={rows}
       cols={cols}
-      rowKey={(r) => `${r.type}#${r.index}`}
       onAdd={
         m.activityTypes.length
           ? () => edit((p) => void p.master.activityTypes[0]!.rates.push({ cctr: p.master.costCenters[0]?.id ?? '', planRate: 0 }))
@@ -354,7 +348,6 @@ function Skfs() {
       title={ja.master.tabs.skfs}
       rows={m.skfs}
       cols={cols}
-      rowKey={(x) => x.id}
       onAdd={() => edit((p) => void p.master.skfs.push({ id: newId(ids(), 'SKF'), name: '', unit: '', values: [] }))}
       onDelete={(x) => deleteChecked('SKF', x.id, (p) => void (p.master.skfs = p.master.skfs.filter((y) => y.id !== x.id)))}
     />
@@ -420,7 +413,6 @@ function SkfValues() {
       title={ja.master.tabs.skfValues}
       rows={rows}
       cols={cols}
-      rowKey={(r) => `${r.skf}#${r.index}`}
       onAdd={m.skfs.length ? () => edit((p) => void p.master.skfs[0]!.values.push({ obj: { type: 'CCTR', id: p.master.costCenters[0]?.id ?? '' }, value: 0 })) : undefined}
       onDelete={(r) => edit((p) => void p.master.skfs.find((s) => s.id === r.skf)!.values.splice(r.index, 1))}
     />
@@ -475,7 +467,6 @@ function Segments() {
     <EditGrid
       rows={m.segments}
       cols={cols}
-      rowKey={(s) => s.id}
       onAdd={() =>
         edit((p) => {
           const customers = p.master.segments.map((s) => s.chars.customer ?? '');
@@ -503,7 +494,6 @@ function Groups() {
     <EditGrid
       rows={m.groups}
       cols={cols}
-      rowKey={(x) => x.id}
       onAdd={() => edit((p) => void p.master.groups.push({ id: newId(ids(), 'G-'), type: 'CCTR', name: '', members: [] }))}
       onDelete={(x) => deleteChecked('GROUP', x.id, (p) => void (p.master.groups = p.master.groups.filter((y) => y.id !== x.id)))}
     />
@@ -555,7 +545,6 @@ function Profiles() {
     <EditGrid
       rows={m.settlementProfiles}
       cols={cols}
-      rowKey={(x) => x.id}
       onAdd={() => edit((p) => void p.master.settlementProfiles.push({ id: newId(ids(), 'SP-'), allowed: ['CCTR'], structure: [] }))}
       onDelete={(x) => deleteChecked('PROFILE', x.id, (p) => void (p.master.settlementProfiles = p.master.settlementProfiles.filter((y) => y.id !== x.id)))}
     />

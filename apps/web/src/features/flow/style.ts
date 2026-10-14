@@ -20,9 +20,10 @@ export const EDGE_STATE_STYLE: Record<EdgeState, { opacity: number; dash?: strin
 };
 
 /**
- * 金額の構成の色（D-046）。由来の役割ごとに固定する。並びは積み上げの順（PART_ORDER）で、
- * 参照パレットの順番どおりに割り当てているので、隣り合う色は色覚の違いがあっても見分けられる
- * （validate_palette：隣接の CVD ΔE ≥ 9.1、通常視 ≥ 19.6。黄・桃・水色は白地で 3:1 未満なので表表示を必ず用意する）
+ * 金額の構成の色（D-046、D-048）。由来の役割ごとに固定する。並びは積み上げの順（PART_ORDER）で、
+ * 参照パレットの8色を順番どおりに割り当てているので、隣り合う色は色覚の違いがあっても見分けられる
+ * （validate_palette：隣接の CVD ΔE ≥ 9.1、通常視 ≥ 19.6。黄・桃・水色は白地で 3:1 未満なので表表示を必ず用意する）。
+ * 遡れない額（発生元のときだけ）と配った額（直前の送り手のときだけ）は同時に出ないので、同じ灰色を使う
  */
 export const PART_COLOR: Record<PartKind, string> = {
   DIRECT: '#2a78d6',
@@ -31,9 +32,10 @@ export const PART_COLOR: Record<PartKind, string> = {
   OPERATING: '#eda100',
   PROJECT: '#e87ba4',
   GOAL: '#008300',
-  PC: '#4a3aa7',
+  REVENUE: '#4a3aa7',
+  PC: '#e34948',
   NONE: '#898781',
-  SENT: '#e34948',
+  SENT: '#898781',
 };
 
 /** 対象そのものの役割の色（サンキー図のノードなど）。由来の色と同じ */
