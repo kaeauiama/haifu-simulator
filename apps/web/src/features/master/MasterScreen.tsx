@@ -127,7 +127,6 @@ function Accounts() {
   ];
   return (
     <EditGrid
-      note={ja.master.mockNote}
       rows={m.accounts}
       cols={cols}
       rowKey={(a) => a.id}
@@ -453,7 +452,6 @@ function Segments() {
   ];
   return (
     <EditGrid
-      note={ja.master.segmentIdNote}
       rows={m.segments}
       cols={cols}
       rowKey={(s) => s.id}

@@ -73,10 +73,7 @@ export function Header() {
 
   return (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-background px-4 py-2">
-      <div className="flex items-baseline gap-2">
-        <h1 className="text-lg font-bold">{ja.app.title}</h1>
-        <span className="text-xs text-muted-foreground">{ja.app.subtitle}</span>
-      </div>
+      <h1 className="text-lg font-bold">{ja.app.title}</h1>
       <nav className="flex gap-1">
         {SCREENS.map((s) => (
           <Button key={s} size="sm" variant={screen === s ? 'default' : 'ghost'} onClick={() => setUi({ screen: s })}>

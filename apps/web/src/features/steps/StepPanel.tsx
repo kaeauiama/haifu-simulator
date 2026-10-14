@@ -273,7 +273,6 @@ function StepDetail({ step }: { step: ClosingStep }) {
             ))}
           </ul>
         )}
-        {step.kind === 'ACTUAL_RATE_REVAL' && <p className="mt-1 text-xs text-muted-foreground">{ja.steps.revalAll}</p>}
       </div>
       <Button
         size="sm"

@@ -31,7 +31,6 @@ export function ObjectBoard() {
           {ja.board.showZero}
         </label>
       </div>
-      <p className="text-xs text-muted-foreground">{ja.board.hint}</p>
       <div className="grid min-h-0 min-w-0 flex-1 gap-3 overflow-auto" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(12rem, 1fr))` }}>
         {columns.map((c) => (
           <div key={c.type} className="space-y-1.5">

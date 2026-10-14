@@ -5,7 +5,6 @@ import { MainScreen } from '@/features/MainScreen';
 import { Header } from '@/features/header/Header';
 import { MasterScreen } from '@/features/master/MasterScreen';
 import { PostingsScreen } from '@/features/postings/PostingsScreen';
-import { ja } from '@/i18n/ja';
 import { redo, undo } from '@/store/project';
 import { useEngineSync } from '@/store/run';
 import { useUiStore } from '@/store/ui';
@@ -36,7 +35,6 @@ export function App() {
     <TooltipProvider>
       <div className="flex h-screen flex-col bg-muted/40 text-foreground">
         <Header />
-        <p className="border-b bg-amber-50 px-4 py-1 text-xs text-amber-900">{ja.app.disclaimer}</p>
         <main className="min-h-0 flex-1">
           {screen === 'main' && <MainScreen />}
           {screen === 'master' && <MasterScreen />}

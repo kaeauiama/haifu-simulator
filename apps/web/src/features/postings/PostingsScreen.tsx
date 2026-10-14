@@ -81,7 +81,6 @@ export function PostingsScreen() {
       <div className="min-h-0 space-y-2">
         <EditGrid
           title={`${ja.postings.heading}（${ja.postings.count(postings.length)}）`}
-          note={ja.postings.note}
           rows={rows}
           cols={cols}
           rowKey={(x) => x.id}
