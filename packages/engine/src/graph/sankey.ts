@@ -5,13 +5,14 @@
 import type { MasterIndex } from '../ledger/masterIndex.ts';
 import { compareShareKey } from '../ledger/rounding.ts';
 import { objKey, parseObjKey } from '../model/keys.ts';
-import type { Ledger, ObjType, Scenario, Yen } from '../model/types.ts';
+import type { Ledger, ObjTier, ObjType, Scenario, Yen } from '../model/types.ts';
 import { DISPLAY_LIMITS } from './limits.ts';
 import { describeRules, type Method } from './rules.ts';
 
 export interface SankeyNode {
   key: string;
   type: ObjType;
+  tier: ObjTier;
   label: string;
 }
 
@@ -90,7 +91,7 @@ export function buildSankey(ledger: Ledger, scenario: Scenario, mi: MasterIndex,
   const keys = new Set(kept.flatMap((l) => [l.source, l.target]));
   const nodes = [...keys].sort(compareShareKey).map((key) => {
     const o = parseObjKey(key);
-    return { key, type: o.type, label: o.type === 'PSEG' ? mi.name(o) : `${o.id} ${mi.name(o)}`.trim() };
+    return { key, type: o.type, tier: mi.tierOf(o), label: o.type === 'PSEG' ? mi.name(o) : `${o.id} ${mi.name(o)}`.trim() };
   });
   return { nodes, links: kept, omitted: dropped.size, total };
 }

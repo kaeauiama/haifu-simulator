@@ -28,3 +28,4 @@ export * from './edit/relations.ts';
 export * from './graph/sankey.ts';
 export * from './io/settings.ts';
 export { DISPLAY_LIMITS } from './graph/limits.ts';
+export * from './graph/composition.ts';

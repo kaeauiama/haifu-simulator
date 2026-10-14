@@ -25,11 +25,14 @@ export const ProfitCenterSchema = z.object({
 });
 
 export const CostCenterKindSchema = z.enum(['ADMIN', 'PROD', 'SALES', 'SERVICE']);
+/** 配賦上の役割（D-045）。コーポ部門 → 間接部門 → 直接部門 の順にお金が流れる。省くと区分から決める */
+export const CostCenterTierSchema = z.enum(['CORPORATE', 'SUPPORT', 'OPERATING']);
 export const CostCenterSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
   profitCenter: z.string().min(1),
   kind: CostCenterKindSchema,
+  tier: CostCenterTierSchema.optional(),
   groupId: z.string().optional(),
 });
 

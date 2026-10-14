@@ -13,6 +13,7 @@ import type {
   Group,
   Master,
   ObjRef,
+  ObjTier,
   ProfitCenter,
   ProfitabilitySegment,
   SettlementProfile,
@@ -88,6 +89,25 @@ export class MasterIndex {
         return isSegmentKey(obj.id);
       case 'ORD':
         return false;
+    }
+  }
+
+  /** 配賦上の役割（D-045）。原価センタは役割が未設定なら区分から決める */
+  tierOf(obj: ObjRef): ObjTier {
+    switch (obj.type) {
+      case 'PCTR':
+        return 'PC';
+      case 'CCTR': {
+        const c = this.costCenters.get(obj.id);
+        if (c?.tier) return c.tier;
+        return c?.kind === 'ADMIN' ? 'CORPORATE' : c?.kind === 'SERVICE' ? 'SUPPORT' : 'OPERATING';
+      }
+      case 'WBS':
+        return this.wbs.get(obj.id)?.projectType === 'CUSTOMER' ? 'GOAL' : 'PROJECT';
+      case 'ORD':
+        return 'PROJECT';
+      case 'PSEG':
+        return 'GOAL';
     }
   }
 

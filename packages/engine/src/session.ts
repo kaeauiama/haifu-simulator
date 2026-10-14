@@ -6,6 +6,7 @@
 import { compareRuns } from './compare/compare.ts';
 import { buildMethodView, type MethodView, type ViewMethod } from './graph/methodView.ts';
 import { buildSankey, type SankeyData } from './graph/sankey.ts';
+import { buildComposition, type CompositionMode, type CompositionView } from './graph/composition.ts';
 import { DISPLAY_LIMITS, topByAmount } from './graph/limits.ts';
 import { journalToCsv } from './io/csv.ts';
 import { describeRules, structuralEdges, type Method, type RuleInfo, type RuleKind } from './graph/rules.ts';
@@ -13,7 +14,7 @@ import type { ReadonlyBalanceIndex } from './ledger/balance.ts';
 import { MasterIndex, segmentLabel } from './ledger/masterIndex.ts';
 import { LineageTracer, UNATTRIBUTED } from './lineage/lineage.ts';
 import { compareId, compareObj, objKey, parseObjKey } from './model/keys.ts';
-import { PRIMARY_STEP_ID, type Issue, type ObjType, type Project, type Severity, type StepKind, type Yen } from './model/types.ts';
+import { PRIMARY_STEP_ID, TIER_ORDER, type Issue, type ObjTier, type ObjType, type Project, type Severity, type StepKind, type Yen } from './model/types.ts';
 import { objectStepTable, totalsByProfitCenter, totalsBySegment } from './report/totals.ts';
 import { runAll, type RunResult } from './run.ts';
 
@@ -48,6 +49,8 @@ export interface ObjectRow {
   name: string;
   label: string;
   profitCenter: string;
+  /** 配賦上の役割（D-045） */
+  tier: ObjTier;
   balance: Yen;
   /** 直前の時点からの増減 */
   delta: Yen;
@@ -182,6 +185,7 @@ export class SimSession {
   readonly result: RunResult;
   readonly mi: MasterIndex;
   private tracer?: LineageTracer;
+  private originTracer?: LineageTracer;
 
   constructor(
     readonly project: Project,
@@ -279,12 +283,16 @@ export class SimSession {
           name: mi.name(obj),
           label: mi.label(obj),
           profitCenter: mi.derivePC(obj),
+          tier: mi.tierOf(obj),
           balance,
           delta: balance - (prev ? prev.total(key) : 0),
           residual,
         };
       })
-      .sort((a, b) => OBJ_ORDER.indexOf(a.type) - OBJ_ORDER.indexOf(b.type) || compareObj(a, b));
+      .sort(
+        (a, b) =>
+          TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier) || OBJ_ORDER.indexOf(a.type) - OBJ_ORDER.indexOf(b.type) || compareObj(a, b),
+      );
   }
 
   /** ある時点（ステップ末）の残高。F5-02 の「各時点の残高」 */
@@ -492,6 +500,23 @@ export class SimSession {
       byObject: withLabel(c.byObject, (k) => this.mi.label(parseObjKey(k))),
       steps,
     };
+  }
+
+  /**
+   * 金額の構成（D-046）。選んだ時点で各対象に溜まっている残高を、直課・送り手（または発生元）・配った額に分ける
+   */
+  composition(stepId: string, mode: CompositionMode): CompositionView {
+    const order = this.result.stepOrder;
+    const upTo = order.indexOf(stepId);
+    if (upTo < 0) throw new Error(`step not found: ${stepId}`);
+    const v = buildComposition(mode, {
+      ledger: this.result.ledger,
+      mi: this.mi,
+      steps: new Set(order.slice(0, upTo + 1)),
+      cursor: this.snap(stepId),
+      originTracer: () => (this.originTracer ??= new LineageTracer(this.result.ledger, (l) => objKey(l.obj))),
+    });
+    return { stepId, ...v };
   }
 
   /** 締めで作った仕訳の CSV（F9-04） */

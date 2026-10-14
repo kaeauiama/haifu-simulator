@@ -32,11 +32,11 @@ const master: Master = {
     { id: 'PC30', name: 'サービス事業', groupId: 'PCG-ALL' },
   ],
   costCenters: [
-    { id: '1000', name: '管理部', profitCenter: 'PC10', kind: 'ADMIN', groupId: 'CCG-SUPPORT' },
-    { id: '1100', name: 'IT部', profitCenter: 'PC10', kind: 'SERVICE', groupId: 'CCG-SUPPORT' },
-    { id: '2000', name: '製造部', profitCenter: 'PC20', kind: 'PROD', groupId: 'CCG-OPS' },
-    { id: '2100', name: '製品営業部', profitCenter: 'PC20', kind: 'SALES', groupId: 'CCG-OPS' },
-    { id: '3000', name: 'サービス部', profitCenter: 'PC30', kind: 'SERVICE', groupId: 'CCG-OPS' },
+    { id: '1000', name: '管理部', profitCenter: 'PC10', kind: 'ADMIN', tier: 'CORPORATE', groupId: 'CCG-SUPPORT' },
+    { id: '1100', name: 'IT部', profitCenter: 'PC10', kind: 'SERVICE', tier: 'SUPPORT', groupId: 'CCG-SUPPORT' },
+    { id: '2000', name: '製造部', profitCenter: 'PC20', kind: 'PROD', tier: 'OPERATING', groupId: 'CCG-OPS' },
+    { id: '2100', name: '製品営業部', profitCenter: 'PC20', kind: 'SALES', tier: 'OPERATING', groupId: 'CCG-OPS' },
+    { id: '3000', name: 'サービス部', profitCenter: 'PC30', kind: 'SERVICE', tier: 'OPERATING', groupId: 'CCG-OPS' },
   ],
   wbs: [
     {

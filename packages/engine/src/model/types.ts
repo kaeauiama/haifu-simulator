@@ -43,6 +43,12 @@ export type AccountCategory = z.infer<typeof AccountCategorySchema>;
 export type GLAccount = z.infer<typeof GLAccountSchema>;
 export type ProfitCenter = z.infer<typeof ProfitCenterSchema>;
 export type CostCenter = z.infer<typeof CostCenterSchema>;
+/**
+ * 可視化で使う対象の役割（D-045）。利益センタ、コーポ部門・間接部門・直接部門（原価センタ）、
+ * プロジェクト（間接費プロジェクトの WBS）、ゴール（収益性セグメントと顧客プロジェクト）。この順に左から右へ並べる
+ */
+export type ObjTier = 'PC' | 'CORPORATE' | 'SUPPORT' | 'OPERATING' | 'PROJECT' | 'GOAL';
+export const TIER_ORDER: readonly ObjTier[] = ['PC', 'CORPORATE', 'SUPPORT', 'OPERATING', 'PROJECT', 'GOAL'];
 export type WBSElement = z.infer<typeof WBSElementSchema>;
 export type ActivityType = z.infer<typeof ActivityTypeSchema>;
 export type StatKeyFigure = z.infer<typeof StatKeyFigureSchema>;

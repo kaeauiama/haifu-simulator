@@ -22,3 +22,6 @@ for (const m of ['CCTR_ALLOC', 'MA', 'SETTLEMENT', 'TDD'] as const) {
 }
 const sk = time('sankey', () => s.sankey());
 console.log(`sankey nodes=${sk.nodes.length} links=${sk.links.length} omitted=${sk.omitted}`);
+time('composition SOURCE', () => s.composition(last, 'SOURCE'));
+const co = time('composition ORIGIN', () => s.composition(last, 'ORIGIN'));
+console.log(`composition rows=${co.rows.length}`);

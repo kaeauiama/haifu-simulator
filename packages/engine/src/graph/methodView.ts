@@ -8,7 +8,7 @@ import { normalizeWeights } from '../ledger/rounding.ts';
 import { accountPred, profitCenterKeys, selectObjects } from '../ledger/select.ts';
 import { tddReferenceWeights, tddSenders } from '../methods/tdd.ts';
 import { compareObj, objKey, parseObjKey } from '../model/keys.ts';
-import type { AllocationCycle, ObjRef, ObjType, Scenario, Yen } from '../model/types.ts';
+import { TIER_ORDER, type AllocationCycle, type ObjRef, type ObjTier, type ObjType, type Scenario, type Yen } from '../model/types.ts';
 import { DISPLAY_LIMITS, topByAmount } from './limits.ts';
 import { cycleMethod, type Method, type RuleKind } from './rules.ts';
 
@@ -27,6 +27,7 @@ export interface MethodViewNode {
   id: string;
   name: string;
   label: string;
+  tier: ObjTier;
   side: 'L' | 'R';
   /** 選んだ時点の残高（利益センタは導出される全対象の合計） */
   balance: Yen;
@@ -93,7 +94,19 @@ function buildAll(method: ViewMethod, focus: string | null, d: MethodViewDeps): 
   const { scenario: s, mi } = d;
   const pcKeys = profitCenterKeys(d.cursor, mi);
   const balanceOf = (o: ObjRef) => (o.type === 'PCTR' ? (pcKeys.get(o.id) ?? []).reduce((t, k) => t + d.cursor.total(k), 0) : d.cursor.total(objKey(o)));
-  const node = (o: ObjRef, side: 'L' | 'R'): MethodViewNode => ({ key: objKey(o), type: o.type, id: o.id, name: mi.name(o), label: mi.label(o), side, balance: balanceOf(o) });
+  const node = (o: ObjRef, side: 'L' | 'R'): MethodViewNode => ({
+    key: objKey(o),
+    type: o.type,
+    id: o.id,
+    name: mi.name(o),
+    label: mi.label(o),
+    tier: mi.tierOf(o),
+    side,
+    balance: balanceOf(o),
+  });
+  /** 種類の中では、役割（コーポ部門 → 間接部門 → 直接部門 …）の順に並べる */
+  const byTier = (a: ObjRef, b: ObjRef) =>
+    (a.type !== b.type ? compareObj(a, b) : 0) || TIER_ORDER.indexOf(mi.tierOf(a)) - TIER_ORDER.indexOf(mi.tierOf(b)) || compareObj(a, b);
   const all = (type: ObjType): ObjRef[] => {
     switch (type) {
       case 'CCTR':
@@ -112,8 +125,8 @@ function buildAll(method: ViewMethod, focus: string | null, d: MethodViewDeps): 
     }
   };
   const sides = (l: ObjType[], r: ObjType[]) => ({
-    left: l.flatMap(all).sort(compareObj).map((o) => node(o, 'L')),
-    right: r.flatMap(all).sort(compareObj).map((o) => node(o, 'R')),
+    left: l.flatMap(all).sort(byTier).map((o) => node(o, 'L')),
+    right: r.flatMap(all).sort(byTier).map((o) => node(o, 'R')),
   });
   const base = (ruleId: string) => ({ ruleId, amount: 0, state: d.state(ruleId), severity: d.severity(ruleId) });
 
