@@ -56,6 +56,38 @@ describe('配布・配賦（F3-01、5.2）', () => {
     expect(bal(r, cc('1000'))).toBe(0);
   });
 
+  it('P-12（D-053） 同じ送信者を勘定を分けて2つのセグメントに置くと、それぞれの勘定の額を送り、送信者は0になる', () => {
+    const c = cycle1000('OVERHEAD');
+    c.segments.push({
+      id: 'SEG-2',
+      name: '1000の減価償却→2100',
+      sender: { objects: { type: 'CCTR', mode: 'LIST', ids: ['1000'] }, accounts: [{ from: '65000000', to: '65999999' }], sharePct: 100 },
+      receiver: { objects: { type: 'CCTR', mode: 'LIST', ids: ['2100'] }, factor: { kind: 'FIXED_PERCENT', weights: [{ obj: cc('2100'), pct: 100 }] } },
+      allocAccount: '94110000',
+    });
+    const p = testProject({
+      postings: [salary1000, pp('PX', '65000000', cc('1000'), 500_000)],
+      scenario: emptyScenario([step('ST-A', 'ALLOC_CYCLE', ['CY-T'])], { cycles: [c] }),
+      master: (m) => void m.accounts.push({ id: '94110000', name: '配賦（減価償却）', category: 'SEC42' }),
+    });
+    const r = run(p);
+    expect(bal(r, cc('2000'), '94100000')).toBe(600_000);
+    expect(bal(r, cc('2100'), '94100000')).toBe(400_000);
+    expect(bal(r, cc('2100'), '94110000')).toBe(500_000);
+    expect(bal(r, cc('1000'))).toBe(0);
+  });
+
+  it('P-12 同じサイクルを2つのステップで回しても、2回目は前のステップの貸方を差し引いて二重に送らない', () => {
+    const p = testProject({
+      postings: [salary1000],
+      scenario: emptyScenario([step('ST-A', 'ALLOC_CYCLE', ['CY-T']), step('ST-B', 'ALLOC_CYCLE', ['CY-T'])], { cycles: [cycle1000('OVERHEAD')] }),
+    });
+    const r = run(p);
+    expect(linesOf(r, 'ST-B')).toEqual([]);
+    expect(bal(r, cc('2000'))).toBe(600_000);
+    expect(bal(r, cc('1000'))).toBe(0);
+  });
+
   it('T-03 1,000,000円を3者に均等配布：333,334／333,333／333,333、端数はIDが最小の受信者へ', () => {
     const c = cycle1000('DISTRIBUTION');
     c.segments[0]!.receiver = {

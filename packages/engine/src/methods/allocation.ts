@@ -53,7 +53,13 @@ function readerFor(cycle: AllocationCycle, poster: Poster): SenderReader {
   };
 }
 
-function senderPools(cycle: AllocationCycle, seg: AllocSegment, key: string, reader: SenderReader, allocAccounts: Set<string>): Pool[] {
+/** このサイクルの今回の実行で、送信者として出した貸方（配賦タイプ。P-12、D-053） */
+interface OwnCredits {
+  amount: Map<string, Yen>;
+  lineIds: Set<string>;
+}
+
+function senderPools(cycle: AllocationCycle, seg: AllocSegment, key: string, reader: SenderReader, allocAccounts: Set<string>, own?: OwnCredits): Pool[] {
   const sel = accountPred(seg.sender.accounts);
   const balances = reader.accounts(key);
   if (cycle.type === 'DISTRIBUTION') {
@@ -65,10 +71,14 @@ function senderPools(cycle: AllocationCycle, seg: AllocSegment, key: string, rea
     }
     return pools;
   }
+  // サイクルの配賦勘定の残高は自動で含める（受け取った額、前のステップでの自分の貸方）。
+  // ただし、この実行の前のセグメントで自分が出した貸方は含めない（同じ送信者を勘定を分けて複数のセグメントに置ける）
   const pred = (a: string) => sel(a) || allocAccounts.has(a);
-  let balance = 0;
+  let balance = -(own?.amount.get(key) ?? 0);
   for (const [a, v] of balances) if (pred(a)) balance += v;
-  return balance === 0 ? [] : [{ account: seg.allocAccount!, balance, sources: reader.sources(key, pred) }];
+  if (balance === 0) return [];
+  const sources = reader.sources(key, pred);
+  return [{ account: seg.allocAccount!, balance, sources: own?.lineIds.size ? sources.filter((id) => !own.lineIds.has(id)) : sources }];
 }
 
 /** 送信者1件・1勘定分の送信を受信側へ割って計上する。額を受け取った受信者（自分以外）のキーを返す */
@@ -97,15 +107,17 @@ function runSequential(cycle: AllocationCycle, poster: Poster, allocAccounts: Se
   const { mi, state } = poster.ctx;
   const processed = new Set<string>();
   const warned = new Set<string>();
+  const own: OwnCredits = { amount: new Map(), lineIds: new Set() };
   for (const seg of cycle.segments) {
     const recv = resolveReceivers(seg, cycle.id, poster);
     if (!recv) continue;
+    const firstLine = state.lines.length;
     const share = seg.sender.sharePct / 100;
     // 同じセグメントの送信者は、セグメント開始時点の残高を同時に読む（P-02）
     const reader = readerFor(cycle, poster);
     const plans = selectObjects(seg.sender.objects, mi, state.balances).map((obj) => {
       const key = objKey(obj);
-      return { obj, key, pools: senderPools(cycle, seg, key, reader, allocAccounts) };
+      return { obj, key, pools: senderPools(cycle, seg, key, reader, allocAccounts, own) };
     });
     const current = new Set(plans.map((p) => p.key));
     for (const p of plans) {
@@ -121,6 +133,15 @@ function runSequential(cycle: AllocationCycle, poster: Poster, allocAccounts: Se
       }
     }
     for (const k of current) processed.add(k);
+    if (cycle.type === 'OVERHEAD') {
+      for (let i = firstLine; i < state.lines.length; i++) {
+        const l = state.lines[i]!;
+        if (l.role !== 'SENDER') continue;
+        const k = objKey(l.obj);
+        own.amount.set(k, (own.amount.get(k) ?? 0) + l.amount);
+        own.lineIds.add(l.id);
+      }
+    }
   }
 }
 
