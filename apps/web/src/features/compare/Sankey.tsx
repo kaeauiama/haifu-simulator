@@ -6,7 +6,7 @@ import { fmtYen, type SankeyData, type SankeyLink as Link, type SankeyNode as No
 import { sankey, sankeyLinkHorizontal, type SankeyLink, type SankeyNode } from 'd3-sankey';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ja } from '@/i18n/ja';
-import { METHOD_COLOR } from '../flow/style';
+import { METHOD_COLOR, TIER_COLOR } from '../flow/style';
 
 type N = SankeyNode<Node, Link>;
 type L = SankeyLink<Node, Link>;
@@ -65,7 +65,7 @@ export function Sankey({ data, highlight }: { data: SankeyData; highlight?: Read
               const right = (n.x0 ?? 0) > width / 2;
               return (
                 <g key={n.key}>
-                  <rect x={n.x0} y={n.y0} width={(n.x1 ?? 0) - (n.x0 ?? 0)} height={Math.max(1, (n.y1 ?? 0) - (n.y0 ?? 0))} className="fill-foreground/60" />
+                  <rect x={n.x0} y={n.y0} width={(n.x1 ?? 0) - (n.x0 ?? 0)} height={Math.max(1, (n.y1 ?? 0) - (n.y0 ?? 0))} fill={TIER_COLOR[n.tier]} />
                   <text
                     x={right ? (n.x0 ?? 0) - 6 : (n.x1 ?? 0) + 6}
                     y={((n.y0 ?? 0) + (n.y1 ?? 0)) / 2}

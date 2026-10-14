@@ -3,7 +3,7 @@
  * 最後に実行したセッションを持ち、画面からの問い合わせに表示用の値を返す。
  * version が古い問い合わせには null を返し、古い結果を画面に出さない。
  */
-import { SimSession, type Project, type ViewMethod } from '@alloc-sim/engine';
+import { SimSession, type CompositionMode, type Project, type ViewMethod } from '@alloc-sim/engine';
 import * as Comlink from 'comlink';
 
 let session: SimSession | null = null;
@@ -54,6 +54,9 @@ const api = {
   },
   sankey(v: number, scenarioId: string, stepIds: string[] | null) {
     return sessionFor(v, scenarioId)?.sankey(stepIds ?? undefined) ?? null;
+  },
+  composition(v: number, stepId: string, mode: CompositionMode) {
+    return current(v)?.composition(stepId, mode) ?? null;
   },
   journalCsv(v: number) {
     return current(v)?.journalCsv() ?? null;

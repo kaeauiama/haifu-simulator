@@ -10,8 +10,9 @@ import { FlowView } from './FlowView';
 import { canAutoLayout } from './layout';
 import { MethodView } from './MethodView';
 import { SankeyView } from '../compare/SankeyView';
+import { CompositionView } from './CompositionView';
 
-const VIEWS: FlowViewKind[] = ['ALL', 'SANKEY', ...VIEW_METHODS];
+const VIEWS: FlowViewKind[] = ['ALL', 'SANKEY', 'COMPOSITION', ...VIEW_METHODS];
 const LAYOUTS: FlowLayout[] = ['auto', 'columns'];
 
 export function FlowPanel() {
@@ -45,7 +46,7 @@ export function FlowPanel() {
           </div>
         )}
       </div>
-      <div className="min-h-0 flex-1">{view === 'ALL' ? <FlowView /> : view === 'SANKEY' ? <SankeyView /> : <MethodView />}</div>
+      <div className="min-h-0 flex-1">{view === 'ALL' ? <FlowView /> : view === 'SANKEY' ? <SankeyView /> : view === 'COMPOSITION' ? <CompositionView /> : <MethodView />}</div>
     </div>
   );
 }

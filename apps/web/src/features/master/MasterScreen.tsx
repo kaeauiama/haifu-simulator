@@ -31,6 +31,7 @@ import { EditGrid } from './EditGrid';
 import { deleteChecked, edit, newId, opts, project, renameCommit } from './masterEdit';
 
 const C = ja.master.col;
+const CCTR_TIERS = ['CORPORATE', 'SUPPORT', 'OPERATING'] as const;
 const TABS = ['basic', 'accounts', 'profitCenters', 'costCenters', 'wbs', 'activityTypes', 'skfs', 'segments', 'groups', 'profiles'] as const;
 
 export function MasterScreen() {
@@ -172,6 +173,24 @@ function CostCenters() {
     { id: 'name', header: C.name, cell: (x, i) => <TextCell value={x.name} commit={(v) => set(i, (c) => void (c.name = v))} /> },
     { id: 'pc', header: C.profitCenter, cell: (x, i) => <SelectCell value={x.profitCenter} options={opts.profitCenters(project())} commit={(v) => set(i, (c) => void (c.profitCenter = v))} /> },
     { id: 'kind', header: C.kind, cell: (x, i) => <SelectCell value={x.kind} options={opts.enumOf(ja.cctrKind)} commit={(v) => set(i, (c) => void (c.kind = v as CostCenter['kind']))} /> },
+    {
+      id: 'tier',
+      header: C.tier,
+      cell: (x, i) => (
+        <SelectCell
+          allowEmpty
+          emptyLabel={ja.master.tierFromKind}
+          value={x.tier ?? ''}
+          options={CCTR_TIERS.map((t) => ({ value: t, label: ja.tier[t] }))}
+          commit={(v) =>
+            set(i, (c) => {
+              if (v) c.tier = v as NonNullable<CostCenter['tier']>;
+              else delete c.tier;
+            })
+          }
+        />
+      ),
+    },
     {
       id: 'group',
       header: C.group,

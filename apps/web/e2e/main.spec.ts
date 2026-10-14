@@ -109,3 +109,15 @@ test('入出力：JSON を保存して読み込み直せる。設定一覧を Ex
   await wb.xlsx.readFile(xlsxPath);
   expect(wb.worksheets.map((w) => w.name)).toEqual(['締めステップ', 'サイクル', '決済規則', '直接活動配分', '原価計算シート', 'TDD']);
 });
+
+test('金額の構成：役割ごとに対象の残高を積み上げで見せ、発生元に切り替えられる。表でも見られる', async ({ page }) => {
+  await page.getByRole('button', { name: '金額の構成', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'コーポ部門' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'ゴール' })).toBeVisible();
+  const rowA = page.getByRole('button', { name: /顧客A×PG1×PC20/ });
+  await expect(rowA).toContainText('-2,103,000');
+  await page.getByRole('button', { name: '発生元', exact: true }).click();
+  await expect(page.getByRole('img', { name: /顧客A×PG1×PC20：直課 -6,000,000.*プロジェクト由来：P-100 社内システム刷新 1,260,000/ })).toBeVisible();
+  await page.getByRole('button', { name: '表', exact: true }).click();
+  await expect(page.getByRole('cell', { name: /プロジェクト由来：P-100 社内システム刷新/ }).first()).toBeVisible();
+});

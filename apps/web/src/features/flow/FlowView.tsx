@@ -12,6 +12,7 @@ import {
   ReactFlowProvider,
   useNodesState,
   useReactFlow,
+  ViewportPortal,
   type Connection,
   type Edge,
   type EdgeTypes,
@@ -23,7 +24,7 @@ import { ja } from '@/i18n/ja';
 import { useRunStore } from '@/store/run';
 import { useUiStore } from '@/store/ui';
 import { ConnectDialog, type PendingConnection } from './ConnectDialog';
-import { canAutoLayout, columnLayout, layoutGraph } from './layout';
+import { canAutoLayout, columnHeaders, columnLayout, layoutGraph } from './layout';
 import { ObjNode, type ObjFlowNode } from './ObjNode';
 import { RuleEdge, type RuleFlowEdge } from './RuleEdge';
 import { EDGE_STATE_STYLE, METHOD_COLOR } from './style';
@@ -63,7 +64,7 @@ function FlowCanvas() {
   useEffect(() => {
     if (!graph) return;
     let cancelled = false;
-    const input = { nodes: graph.nodes.map((n) => ({ id: n.key, type: n.type })), edges: uniquePairs(graph), ...size };
+    const input = { nodes: graph.nodes.map((n) => ({ id: n.key, type: n.type, tier: n.tier })), edges: uniquePairs(graph), ...size };
     if (layoutMode === 'columns') setLayout({ key: layoutKey, pos: columnLayout(input) });
     else
       void layoutGraph(input).then((pos) => {
@@ -148,6 +149,19 @@ function FlowCanvas() {
         maxZoom={2}
       >
         <Background gap={24} size={1} />
+        {layoutMode === 'columns' && graph && layout && (
+          <ViewportPortal>
+            {columnHeaders(
+              graph.nodes.map((n) => ({ id: n.key, type: n.type, tier: n.tier })),
+              layout.pos,
+              size.height,
+            ).map((h) => (
+              <div key={h.tier} className="absolute text-sm font-semibold text-muted-foreground" style={{ transform: `translate(${h.x}px, ${h.y}px)` }}>
+                {ja.tier[h.tier]}
+              </div>
+            ))}
+          </ViewportPortal>
+        )}
         <Controls showInteractive={false} />
         <Panel position="top-left">
           <Legend />

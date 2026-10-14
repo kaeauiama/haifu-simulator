@@ -3,7 +3,7 @@
  * 値が左から右へ流れるように置く（6章）。elkjs は専用の Web Worker で動かし、画面を止めない。
  * 大きい図は自動配置に時間がかかるので、種類ごとの列に並べる（AUTO_LAYOUT_LIMIT）。
  */
-import type { ObjType } from '@alloc-sim/engine';
+import { TIER_ORDER, type ObjTier, type ObjType } from '@alloc-sim/engine';
 import ELK from 'elkjs/lib/elk-api.js';
 import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 
@@ -14,10 +14,8 @@ export const canAutoLayout = (nodes: number, edges: number) => nodes <= AUTO_LAY
 
 const elk = new ELK({ workerUrl: elkWorkerUrl });
 
-const PARTITION: Record<ObjType, number> = { PCTR: 0, CCTR: 1, WBS: 2, ORD: 2, PSEG: 3 };
-
 export interface LayoutInput {
-  nodes: { id: string; type: ObjType }[];
+  nodes: { id: string; type: ObjType; tier: ObjTier }[];
   edges: { source: string; target: string }[];
   width: number;
   height: number;
@@ -36,22 +34,30 @@ export async function layoutGraph({ nodes, edges, width, height }: LayoutInput):
       'elk.spacing.nodeNode': String(Math.round(height * 0.3)),
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
     },
-    children: nodes.map((n) => ({ id: n.id, width, height, layoutOptions: { 'elk.partitioning.partition': String(PARTITION[n.type]) } })),
+    // 役割の順（コーポ部門 → 間接部門 → 直接部門 → プロジェクト → ゴール）に左から右へ（D-045）
+    children: nodes.map((n) => ({ id: n.id, width, height, layoutOptions: { 'elk.partitioning.partition': String(TIER_ORDER.indexOf(n.tier)) } })),
     edges: edges.map((e, i) => ({ id: `e${i}`, sources: [e.source], targets: [e.target] })),
   });
   return new Map((res.children ?? []).map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
 }
 
-const COLUMN_ORDER: ObjType[] = ['PCTR', 'CCTR', 'WBS', 'ORD', 'PSEG'];
-
-/** 種類ごとの列に並べる（列の中は渡された順） */
+/** 役割ごとの列に並べる（列の中は渡された順）。列の見出しの位置も返す */
 export function columnLayout({ nodes, width, height }: LayoutInput): Map<string, { x: number; y: number }> {
-  const cols = COLUMN_ORDER.filter((t) => nodes.some((n) => n.type === t));
+  const cols = TIER_ORDER.filter((t) => nodes.some((n) => n.tier === t));
   const out = new Map<string, { x: number; y: number }>();
   cols.forEach((t, c) => {
     nodes
-      .filter((n) => n.type === t)
+      .filter((n) => n.tier === t)
       .forEach((n, i) => out.set(n.id, { x: c * width * 1.9, y: i * height * 1.45 }));
   });
   return out;
+}
+
+/** 列の見出し（役割ごとの列のとき）：役割と、その列の左上の位置 */
+export function columnHeaders(nodes: LayoutInput['nodes'], pos: Map<string, { x: number; y: number }>, height: number): { tier: ObjTier; x: number; y: number }[] {
+  return TIER_ORDER.flatMap((t) => {
+    const ps = nodes.filter((n) => n.tier === t).map((n) => pos.get(n.id)!).filter(Boolean);
+    if (!ps.length) return [];
+    return [{ tier: t, x: Math.min(...ps.map((p) => p.x)), y: Math.min(...ps.map((p) => p.y)) - height * 0.75 }];
+  });
 }

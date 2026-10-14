@@ -2,7 +2,7 @@
  * 画面の文言（CLAUDE.md：画面の文言はここに集める）。
  * 検証メッセージの既定文言はエンジンの ISSUE_DEFS が持つ。
  */
-import type { AccountCategory, CostCenter, Method, ObjType, RuleKind, Severity, StepKind, ViewMethod, WBSElement, WeightBasis } from '@alloc-sim/engine';
+import type { AccountCategory, CompositionMode, CostCenter, Method, ObjTier, ObjType, PartKind, RuleKind, Severity, StepKind, ViewMethod, WBSElement, WeightBasis } from '@alloc-sim/engine';
 
 export const ja = {
   app: {
@@ -158,6 +158,7 @@ export const ja = {
       group: 'グループ',
       profitCenter: '利益センタ',
       kind: '区分',
+      tier: '役割',
       projectType: 'プロジェクト区分',
       responsibleCctr: '責任原価センタ',
       statistical: '統計',
@@ -183,6 +184,7 @@ export const ja = {
       allowed: '許容する受信者',
       structure: '決済構造',
     },
+    tierFromKind: '（区分から）',
     basic: {
       controllingArea: '管理領域',
       companyCode: '会社コード',
@@ -249,6 +251,7 @@ export const ja = {
   view: {
     ALL: '全体',
     SANKEY: '金額の流れ',
+    COMPOSITION: '金額の構成',
     CCTR_ALLOC: '原価センタ配賦',
     PCTR_ALLOC: '利益センタ配賦',
     MA: 'マージン分析',
@@ -256,8 +259,37 @@ export const ja = {
     ACTIVITY: '活動配分',
     OVERHEAD_CALC: '間接費',
     TDD: 'TDD',
-  } satisfies Record<ViewMethod | 'ALL' | 'SANKEY', string>,
-  layout: { auto: '自動配置', columns: '種類ごとの列' },
+  } satisfies Record<ViewMethod | 'ALL' | 'SANKEY' | 'COMPOSITION', string>,
+  layout: { auto: '自動配置', columns: '役割ごとの列' },
+  tier: {
+    PC: '利益センタ',
+    CORPORATE: 'コーポ部門',
+    SUPPORT: '間接部門',
+    OPERATING: '直接部門',
+    PROJECT: 'プロジェクト',
+    GOAL: 'ゴール',
+  } satisfies Record<ObjTier, string>,
+  composition: {
+    mode: { SOURCE: '直前の送り手', ORIGIN: '発生元' } satisfies Record<CompositionMode, string>,
+    chart: 'グラフ',
+    table: '表',
+    part: {
+      DIRECT: '直課',
+      PC: '利益センタ由来',
+      CORPORATE: 'コーポ部門由来',
+      SUPPORT: '間接部門由来',
+      OPERATING: '直接部門由来',
+      PROJECT: 'プロジェクト由来',
+      GOAL: 'ゴール由来',
+      NONE: '遡れない額',
+      SENT: '配った分',
+    } satisfies Record<PartKind, string>,
+    object: '対象',
+    breakdown: '内訳',
+    amount: '額',
+    balance: '残高',
+    empty: '（残高のある対象がありません）',
+  },
   relation: {
     sender: '送信側',
     receiver: '受信側',

@@ -41,7 +41,8 @@ export interface CompositionView {
   rows: CompositionRow[];
 }
 
-const KIND_ORDER: PartKind[] = ['DIRECT', ...TIER_ORDER, 'NONE', 'SENT'];
+/** 積み上げの順。直課 → 由来の役割（お金が流れる順）→ 利益センタ → 遡れない額 → 配った額 */
+export const PART_ORDER: readonly PartKind[] = ['DIRECT', 'CORPORATE', 'SUPPORT', 'OPERATING', 'PROJECT', 'GOAL', 'PC', 'NONE', 'SENT'];
 
 export interface CompositionDeps {
   ledger: Ledger;
@@ -105,7 +106,7 @@ export function buildComposition(mode: CompositionMode, d: CompositionDeps): Omi
       .filter(([, v]) => v !== 0)
       .map(([part, amount]) => ({ key: part, kind: kindOf(part), label: part.includes(':') ? labelOf(mi, part) : '', amount }));
     if (!parts.length) continue;
-    parts.sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    parts.sort((a, b) => PART_ORDER.indexOf(a.kind) - PART_ORDER.indexOf(b.kind) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
     const obj = parseObjKey(k);
     rows.push({
       key: k,
