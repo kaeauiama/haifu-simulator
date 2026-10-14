@@ -232,6 +232,7 @@ export const ja = {
     addToCosting: (id: string) => `${id} に対象を追加`,
     createError: 'ルールを作れませんでした',
     fit: '全体を表示',
+    shown: (n: number, total: number) => `表示 ${n.toLocaleString('ja-JP')}／${total.toLocaleString('ja-JP')}本`,
   },
   rules: {
     heading: 'ルール',

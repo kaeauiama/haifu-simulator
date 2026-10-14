@@ -9,6 +9,7 @@ import { accountPred, profitCenterKeys, selectObjects } from '../ledger/select.t
 import { tddReferenceWeights, tddSenders } from '../methods/tdd.ts';
 import { compareObj, objKey, parseObjKey } from '../model/keys.ts';
 import type { AllocationCycle, ObjRef, ObjType, Scenario, Yen } from '../model/types.ts';
+import { DISPLAY_LIMITS, topByAmount } from './limits.ts';
 import { cycleMethod, type Method, type RuleKind } from './rules.ts';
 
 /** ビューの種類（原価センタと利益センタの配賦は分ける） */
@@ -65,6 +66,8 @@ export interface MethodView {
   left: MethodViewNode[];
   right: MethodViewNode[];
   edges: MethodViewEdge[];
+  /** 線の本数（上限を超えたときは edges より多い。額の大きい順に上限まで描く） */
+  totalEdges: number;
 }
 
 export interface MethodViewDeps {
@@ -82,6 +85,11 @@ export interface MethodViewDeps {
 }
 
 export function buildMethodView(method: ViewMethod, focus: string | null, d: MethodViewDeps): MethodView {
+  const v = buildAll(method, focus, d);
+  return { ...v, edges: topByAmount(v.edges, (e) => e.amount, DISPLAY_LIMITS.methodEdges), totalEdges: v.edges.length };
+}
+
+function buildAll(method: ViewMethod, focus: string | null, d: MethodViewDeps): Omit<MethodView, 'totalEdges'> {
   const { scenario: s, mi } = d;
   const pcKeys = profitCenterKeys(d.cursor, mi);
   const balanceOf = (o: ObjRef) => (o.type === 'PCTR' ? (pcKeys.get(o.id) ?? []).reduce((t, k) => t + d.cursor.total(k), 0) : d.cursor.total(objKey(o)));

@@ -4,8 +4,10 @@
 import { VIEW_METHODS } from '@alloc-sim/engine';
 import { cn } from 'cn';
 import { ja } from '@/i18n/ja';
+import { useRunStore } from '@/store/run';
 import { useUiStore, type FlowLayout, type FlowViewKind } from '@/store/ui';
 import { FlowView } from './FlowView';
+import { canAutoLayout } from './layout';
 import { MethodView } from './MethodView';
 import { SankeyView } from '../compare/SankeyView';
 
@@ -16,6 +18,8 @@ export function FlowPanel() {
   const view = useUiStore((s) => s.flowView);
   const layout = useUiStore((s) => s.flowLayout);
   const setUi = useUiStore((s) => s.set);
+  const graph = useRunStore((s) => s.flowGraph);
+  const autoOk = !graph || canAutoLayout(graph.nodes.length, graph.edges.length);
   const seg = (active: boolean) => cn('rounded-md px-2 py-0.5 text-sm whitespace-nowrap', active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted');
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -28,7 +32,13 @@ export function FlowPanel() {
         {view === 'ALL' && (
           <div className="ml-auto flex gap-1 rounded-md border p-0.5">
             {LAYOUTS.map((l) => (
-              <button key={l} type="button" className={seg(layout === l)} onClick={() => setUi({ flowLayout: l })}>
+              <button
+                key={l}
+                type="button"
+                disabled={l === 'auto' && !autoOk}
+                className={cn(seg((autoOk ? layout : 'columns') === l), 'disabled:opacity-40')}
+                onClick={() => setUi({ flowLayout: l })}
+              >
                 {ja.layout[l]}
               </button>
             ))}

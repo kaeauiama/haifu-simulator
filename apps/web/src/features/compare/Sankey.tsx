@@ -81,6 +81,7 @@ export function Sankey({ data, highlight }: { data: SankeyData; highlight?: Read
           </g>
         </svg>
       )}
+      {data.total > data.links.length + data.omitted && <p className="text-xs text-muted-foreground">{ja.flow.shown(data.links.length, data.total)}</p>}
       {data.omitted > 0 && <p className="text-xs text-muted-foreground">{ja.compare.omitted(data.omitted)}</p>}
     </div>
   );

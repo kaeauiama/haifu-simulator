@@ -6,6 +6,7 @@ import type { MasterIndex } from '../ledger/masterIndex.ts';
 import { compareShareKey } from '../ledger/rounding.ts';
 import { objKey, parseObjKey } from '../model/keys.ts';
 import type { Ledger, ObjType, Scenario, Yen } from '../model/types.ts';
+import { DISPLAY_LIMITS } from './limits.ts';
 import { describeRules, type Method } from './rules.ts';
 
 export interface SankeyNode {
@@ -28,6 +29,8 @@ export interface SankeyData {
   links: SankeyLink[];
   /** 循環を断つために外した流れの数 */
   omitted: number;
+  /** 差し引き後の流れの本数（上限を超えたときは links より多い） */
+  total: number;
 }
 
 export function buildSankey(ledger: Ledger, scenario: Scenario, mi: MasterIndex, stepIds: ReadonlySet<string>): SankeyData {
@@ -65,6 +68,8 @@ export function buildSankey(ledger: Ledger, scenario: Scenario, mi: MasterIndex,
 
   // 残った循環を断つ。大きい流れから深さ優先でたどり、戻る向きの流れ（後退辺）を外す
   links.sort((a, b) => b.value - a.value || compareShareKey(a.source, b.source) || compareShareKey(a.target, b.target));
+  const total = links.length;
+  links.splice(DISPLAY_LIMITS.sankeyLinks);
   const out = new Map<string, SankeyLink[]>();
   for (const l of links) out.set(l.source, [...(out.get(l.source) ?? []), l]);
   const state = new Map<string, 1 | 2>();
@@ -87,5 +92,5 @@ export function buildSankey(ledger: Ledger, scenario: Scenario, mi: MasterIndex,
     const o = parseObjKey(key);
     return { key, type: o.type, label: o.type === 'PSEG' ? mi.name(o) : `${o.id} ${mi.name(o)}`.trim() };
   });
-  return { nodes, links: kept, omitted: dropped.size };
+  return { nodes, links: kept, omitted: dropped.size, total };
 }

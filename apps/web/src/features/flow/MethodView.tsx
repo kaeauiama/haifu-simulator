@@ -270,6 +270,9 @@ function MethodCanvas() {
             ))}
           </>
         )}
+        {current && current.totalEdges > current.edges.length && (
+          <span className="ml-auto text-xs text-muted-foreground">{ja.flow.shown(current.edges.length, current.totalEdges)}</span>
+        )}
         <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
           <Checkbox checked={onlyRelated} onCheckedChange={(c) => setOnlyRelated(c === true)} />
           {R.onlyRelated}
@@ -311,7 +314,12 @@ function EdgePopover({ edge, x, y, view, onClose }: { edge: MethodViewEdge; x: n
   const segment = view.segments.find((s) => s.id === edge.rowId);
   const ref = { ruleKind: edge.ruleKind, ruleId: edge.ruleId, source: edge.source, target: edge.target, ...(edge.rowId !== undefined ? { rowId: edge.rowId } : {}) };
   return (
-    <div className="absolute z-20 w-72 space-y-2 rounded-lg border bg-popover p-3 text-sm shadow-lg" style={{ left: Math.max(8, x - 144), top: y + 12 }}>
+    <div
+      role="dialog"
+      aria-label={`${name(edge.source)} → ${name(edge.target)}`}
+      className="absolute z-20 w-72 space-y-2 rounded-lg border bg-popover p-3 text-sm shadow-lg"
+      style={{ left: Math.max(8, x - 144), top: y + 12 }}
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-medium">{`${name(edge.source)} → ${name(edge.target)}`}</div>

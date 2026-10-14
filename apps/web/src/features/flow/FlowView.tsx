@@ -23,7 +23,7 @@ import { ja } from '@/i18n/ja';
 import { useRunStore } from '@/store/run';
 import { useUiStore } from '@/store/ui';
 import { ConnectDialog, type PendingConnection } from './ConnectDialog';
-import { columnLayout, layoutGraph } from './layout';
+import { canAutoLayout, columnLayout, layoutGraph } from './layout';
 import { ObjNode, type ObjFlowNode } from './ObjNode';
 import { RuleEdge, type RuleFlowEdge } from './RuleEdge';
 import { EDGE_STATE_STYLE, METHOD_COLOR } from './style';
@@ -51,7 +51,9 @@ function FlowCanvas() {
   const { fitView } = useReactFlow();
   const [pending, setPending] = useState<PendingConnection | null>(null);
 
-  const layoutMode = useUiStore((s) => s.flowLayout);
+  const chosenLayout = useUiStore((s) => s.flowLayout);
+  // 大きい図は自動配置に時間がかかるので、種類ごとの列に並べる
+  const layoutMode = graph && !canAutoLayout(graph.nodes.length, graph.edges.length) ? 'columns' : chosenLayout;
   const rem = presentation ? 22 : 16;
   const size = { width: Math.round(NODE_REM.w * rem), height: Math.round(NODE_REM.h * rem) };
 
@@ -149,6 +151,7 @@ function FlowCanvas() {
         <Controls showInteractive={false} />
         <Panel position="top-left">
           <Legend />
+          {graph && graph.totalEdges > graph.edges.length && <p className="mt-1 text-xs text-muted-foreground">{ja.flow.shown(graph.edges.length, graph.totalEdges)}</p>}
         </Panel>
       </ReactFlow>
       <ConnectDialog pending={pending} onClose={() => setPending(null)} />

@@ -27,3 +27,4 @@ export { connectInCycle } from './edit/rules.ts';
 export * from './edit/relations.ts';
 export * from './graph/sankey.ts';
 export * from './io/settings.ts';
+export { DISPLAY_LIMITS } from './graph/limits.ts';

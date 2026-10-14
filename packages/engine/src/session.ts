@@ -6,6 +6,7 @@
 import { compareRuns } from './compare/compare.ts';
 import { buildMethodView, type MethodView, type ViewMethod } from './graph/methodView.ts';
 import { buildSankey, type SankeyData } from './graph/sankey.ts';
+import { DISPLAY_LIMITS, topByAmount } from './graph/limits.ts';
 import { journalToCsv } from './io/csv.ts';
 import { describeRules, structuralEdges, type Method, type RuleInfo, type RuleKind } from './graph/rules.ts';
 import type { ReadonlyBalanceIndex } from './ledger/balance.ts';
@@ -142,6 +143,8 @@ export interface FlowGraph {
   stepId: string;
   nodes: FlowNode[];
   edges: FlowEdge[];
+  /** 線の本数（上限を超えたときは edges より多い。額の大きい順に上限まで描く） */
+  totalEdges: number;
 }
 
 export interface CompareRow {
@@ -327,6 +330,26 @@ export class SimSession {
    * フロー図（F7-01）。ノードは対象、線はルール（同じルール・同じ送信と受信の組は1本）。
    * 線はルールの定義から導き、実際に流れた組も足す。金額は選んだ時点までの累計。
    */
+  private edgeKeyCache?: [string, string, string][];
+
+  /** フロー図の線の組（ルール、送信、受信）。時点によらないので1回だけ作る */
+  private edgeKeys(): [string, string, string][] {
+    if (this.edgeKeyCache) return this.edgeKeyCache;
+    const order = this.result.stepOrder;
+    const seen = new Set<string>();
+    const out: [string, string, string][] = [];
+    const add = (ruleId: string, source: string, target: string) => {
+      const k = `${ruleId}|${source}|${target}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push([ruleId, source, target]);
+    };
+    const final = this.snap(order[order.length - 1]!);
+    for (const e of structuralEdges(this.scenario, this.mi, final)) add(e.ruleId, objKey(e.sender), objKey(e.receiver));
+    for (const l of this.result.ledger) if (l.role === 'RECEIVER' && l.partner) add(l.origin.ruleId, objKey(l.partner), objKey(l.obj));
+    return (this.edgeKeyCache = out);
+  }
+
   /** 選んだ時点までの流れ、ルールの状態、検証の重さ（フロー図と手法別ビューで使う） */
   private flowIndex(stepId: string) {
     const order = this.result.stepOrder;
@@ -416,13 +439,12 @@ export class SimSession {
         severity: fi.severityOf(ruleId),
       });
     };
-    const final = this.snap(order[order.length - 1]!);
-    for (const e of structuralEdges(this.scenario, this.mi, final)) add(e.ruleId, objKey(e.sender), objKey(e.receiver));
-    for (const l of this.result.ledger) if (l.role === 'RECEIVER' && l.partner) add(l.origin.ruleId, objKey(l.partner), objKey(l.obj));
+    for (const [ruleId, source, target] of this.edgeKeys()) add(ruleId, source, target);
 
     // 線の端がノードにない（参照切れなど）ものは描けないので外す
     const known = new Set(nodes.map((n) => n.key));
-    return { stepId, nodes, edges: [...edges.values()].filter((e) => known.has(e.source) && known.has(e.target)) };
+    const all = [...edges.values()].filter((e) => known.has(e.source) && known.has(e.target));
+    return { stepId, nodes, edges: topByAmount(all, (e) => e.amount, DISPLAY_LIMITS.flowEdges), totalEdges: all.length };
   }
 
   /** 手法ごとの関係ビュー。focus はサイクルのビューで表示するサイクル */

@@ -1,13 +1,18 @@
 /**
- * フロー図の自動配置（elkjs）。対象の種類ごとに列（パーティション）を分け、値が左から右へ流れるように置く（6章）。
- * 同じ列の中でも、原価センタ間の配賦などで段が分かれる。
+ * フロー図の配置。自動配置は elkjs（layered）で、対象の種類ごとに列（パーティション）を分け、
+ * 値が左から右へ流れるように置く（6章）。elkjs は専用の Web Worker で動かし、画面を止めない。
+ * 大きい図は自動配置に時間がかかるので、種類ごとの列に並べる（AUTO_LAYOUT_LIMIT）。
  */
 import type { ObjType } from '@alloc-sim/engine';
-import type { ELK as ElkInstance } from 'elkjs/lib/elk-api.js';
+import ELK from 'elkjs/lib/elk-api.js';
+import elkWorkerUrl from 'elkjs/lib/elk-worker.min.js?url';
 
-// elkjs は大きいので、最初に配置を計算するときに読み込む
-let elkPromise: Promise<ElkInstance> | null = null;
-const getElk = () => (elkPromise ??= import('elkjs/lib/elk.bundled.js').then((m) => new m.default()));
+/** これを超える図は自動配置しない（514ノード・1,500本で約9秒かかった） */
+export const AUTO_LAYOUT_LIMIT = { nodes: 300, edges: 600 } as const;
+
+export const canAutoLayout = (nodes: number, edges: number) => nodes <= AUTO_LAYOUT_LIMIT.nodes && edges <= AUTO_LAYOUT_LIMIT.edges;
+
+const elk = new ELK({ workerUrl: elkWorkerUrl });
 
 const PARTITION: Record<ObjType, number> = { PCTR: 0, CCTR: 1, WBS: 2, ORD: 2, PSEG: 3 };
 
@@ -19,7 +24,6 @@ export interface LayoutInput {
 }
 
 export async function layoutGraph({ nodes, edges, width, height }: LayoutInput): Promise<Map<string, { x: number; y: number }>> {
-  const elk = await getElk();
   const res = await elk.layout({
     id: 'root',
     layoutOptions: {
@@ -31,7 +35,6 @@ export async function layoutGraph({ nodes, edges, width, height }: LayoutInput):
       'elk.layered.spacing.nodeNodeBetweenLayers': String(Math.round(width * 0.25)),
       'elk.spacing.nodeNode': String(Math.round(height * 0.3)),
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-      'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
     },
     children: nodes.map((n) => ({ id: n.id, width, height, layoutOptions: { 'elk.partitioning.partition': String(PARTITION[n.type]) } })),
     edges: edges.map((e, i) => ({ id: `e${i}`, sources: [e.source], targets: [e.target] })),
@@ -41,7 +44,7 @@ export async function layoutGraph({ nodes, edges, width, height }: LayoutInput):
 
 const COLUMN_ORDER: ObjType[] = ['PCTR', 'CCTR', 'WBS', 'ORD', 'PSEG'];
 
-/** 種類ごとの列に並べる（列の中は渡された順）。自動配置の代わりに選べる */
+/** 種類ごとの列に並べる（列の中は渡された順） */
 export function columnLayout({ nodes, width, height }: LayoutInput): Map<string, { x: number; y: number }> {
   const cols = COLUMN_ORDER.filter((t) => nodes.some((n) => n.type === t));
   const out = new Map<string, { x: number; y: number }>();
