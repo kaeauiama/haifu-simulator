@@ -239,7 +239,44 @@ const lateScenario: Scenario = {
   })(),
 };
 
-const SAMPLE: Project = { schemaVersion: 1, master, primaryPostings, scenarios: [defaultScenario, lateScenario] };
+/** 補助部門の費用を、原価センタではなく利益センタで配る案（PC10 → PC20・PC30、人数の合計 28:12） */
+const pcScenario: Scenario = {
+  id: 'S-PC',
+  name: '本社費を利益センタで配賦',
+  memo: '原価センタ間の配賦の代わりに、利益センタ間の配賦で本社（PC10）の費用を事業に配る案。原価センタには残高が残る。',
+  ...rules,
+  cycles: [
+    ...rules.cycles,
+    {
+      id: 'CY-PC',
+      name: '本社費の利益センタ配賦',
+      context: 'PCTR',
+      type: 'OVERHEAD',
+      iterative: false,
+      segments: [
+        {
+          id: 'PC-01',
+          name: '本社→製品事業・サービス事業',
+          sender: { objects: { type: 'PCTR', mode: 'LIST', ids: ['PC10'] }, accounts: [ACCOUNT_RANGES.allCosts], sharePct: 100 },
+          receiver: {
+            objects: { type: 'PCTR', mode: 'LIST', ids: ['PC20', 'PC30'] },
+            factor: {
+              kind: 'FIXED_PORTION',
+              weights: [
+                { obj: { type: 'PCTR', id: 'PC20' }, portion: 28 },
+                { obj: { type: 'PCTR', id: 'PC30' }, portion: 12 },
+              ],
+            },
+          },
+          allocAccount: '94100000',
+        },
+      ],
+    },
+  ],
+  steps: stepsFromTemplate({ ...defaultItems, 'ST-05': ['CY-PC'] }),
+};
+
+const SAMPLE: Project = { schemaVersion: 1, master, primaryPostings, scenarios: [defaultScenario, lateScenario, pcScenario] };
 
 /** サンプル商事のプロジェクト（毎回新しい写しを返す） */
 export const sampleProject = (): Project => structuredClone(SAMPLE);

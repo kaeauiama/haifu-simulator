@@ -350,7 +350,7 @@ interface SkfValueRow {
   value: number;
 }
 
-const OBJ_TYPES_FOR_VALUES: ObjType[] = ['CCTR', 'WBS', 'PSEG'];
+const OBJ_TYPES_FOR_VALUES: ObjType[] = ['CCTR', 'PCTR', 'WBS', 'PSEG'];
 
 function SkfValues() {
   const m = useMaster();

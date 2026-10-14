@@ -6,7 +6,8 @@
 import { solveIterative } from '../iterative/solve.ts';
 import { allocate, roundYen, type Share } from '../ledger/rounding.ts';
 import { accountPred, matchAccount, selectObjects } from '../ledger/select.ts';
-import { compareId, objKey, sameObj } from '../model/keys.ts';
+import { compareId, objKey, parseObjKey, sameObj } from '../model/keys.ts';
+import { profitCenterKeys } from '../ledger/select.ts';
 import type { AllocSegment, AllocationCycle, ObjRef, Yen } from '../model/types.ts';
 import type { Poster } from './context.ts';
 import { RETAIN_KEY, resolveReceivers, type ReceiverWeights } from './weights.ts';
@@ -21,10 +22,6 @@ interface Pool {
 
 export function runAllocationCycle(cycle: AllocationCycle, poster: Poster): void {
   if (poster.ctx.blocked.has(cycle.id)) return;
-  if (cycle.context === 'PCTR') {
-    poster.issue('X-UNSUPPORTED', `${cycle.name}（利益センタ間の配布・配賦は未決事項）`, { ruleId: cycle.id });
-    return;
-  }
   // 配賦では、受け取った配賦勘定の額も次の送信額に含める（段階配賦、反復）
   const allocAccounts = new Set(
     cycle.type === 'OVERHEAD' ? cycle.segments.flatMap((s) => (s.allocAccount ? [s.allocAccount] : [])) : [],
@@ -33,21 +30,45 @@ export function runAllocationCycle(cycle: AllocationCycle, poster: Poster): void
   else runSequential(cycle, poster, allocAccounts);
 }
 
-function senderPools(cycle: AllocationCycle, seg: AllocSegment, key: string, poster: Poster, allocAccounts: Set<string>): Pool[] {
-  const { state } = poster.ctx;
+/** 送信者の残高の読み方。利益センタは、その利益センタに導出される全対象の残高の合計（P-23） */
+interface SenderReader {
+  accounts(key: string): ReadonlyMap<string, Yen>;
+  sources(key: string, pred: (account: string) => boolean): string[];
+}
+
+function readerFor(cycle: AllocationCycle, poster: Poster): SenderReader {
+  const { state, mi } = poster.ctx;
+  if (cycle.context !== 'PCTR') {
+    return { accounts: (k) => state.balances.accountsOf(k), sources: (k, pred) => state.sourceLineIds(k, pred) };
+  }
+  const byPc = profitCenterKeys(state.balances, mi);
+  const keysOf = (key: string) => byPc.get(parseObjKey(key).id) ?? [];
+  return {
+    accounts: (key) => {
+      const m = new Map<string, Yen>();
+      for (const k of keysOf(key)) for (const [a, v] of state.balances.accountsOf(k)) m.set(a, (m.get(a) ?? 0) + v);
+      return m;
+    },
+    sources: (key, pred) => keysOf(key).flatMap((k) => state.sourceLineIds(k, pred)),
+  };
+}
+
+function senderPools(cycle: AllocationCycle, seg: AllocSegment, key: string, reader: SenderReader, allocAccounts: Set<string>): Pool[] {
   const sel = accountPred(seg.sender.accounts);
+  const balances = reader.accounts(key);
   if (cycle.type === 'DISTRIBUTION') {
     const pools: Pool[] = [];
-    const accounts = [...state.balances.accountsOf(key)].filter(([a, v]) => sel(a) && v !== 0);
+    const accounts = [...balances].filter(([a, v]) => sel(a) && v !== 0);
     accounts.sort(([a], [b]) => compareId(a, b));
     for (const [account, balance] of accounts) {
-      pools.push({ account, balance, sources: state.sourceLineIds(key, (a) => a === account) });
+      pools.push({ account, balance, sources: reader.sources(key, (a) => a === account) });
     }
     return pools;
   }
   const pred = (a: string) => sel(a) || allocAccounts.has(a);
-  const balance = state.balances.total(key, pred);
-  return balance === 0 ? [] : [{ account: seg.allocAccount!, balance, sources: state.sourceLineIds(key, pred) }];
+  let balance = 0;
+  for (const [a, v] of balances) if (pred(a)) balance += v;
+  return balance === 0 ? [] : [{ account: seg.allocAccount!, balance, sources: reader.sources(key, pred) }];
 }
 
 /** 送信者1件・1勘定分の送信を受信側へ割って計上する。額を受け取った受信者（自分以外）のキーを返す */
@@ -81,9 +102,10 @@ function runSequential(cycle: AllocationCycle, poster: Poster, allocAccounts: Se
     if (!recv) continue;
     const share = seg.sender.sharePct / 100;
     // 同じセグメントの送信者は、セグメント開始時点の残高を同時に読む（P-02）
+    const reader = readerFor(cycle, poster);
     const plans = selectObjects(seg.sender.objects, mi, state.balances).map((obj) => {
       const key = objKey(obj);
-      return { obj, key, pools: senderPools(cycle, seg, key, poster, allocAccounts) };
+      return { obj, key, pools: senderPools(cycle, seg, key, reader, allocAccounts) };
     });
     const current = new Set(plans.map((p) => p.key));
     for (const p of plans) {
@@ -130,10 +152,13 @@ function runIterative(cycle: AllocationCycle, poster: Poster, allocAccounts: Set
   }
   if (entries.length === 0) return;
 
+  const reader = readerFor(cycle, poster);
   if (cycle.type === 'OVERHEAD') {
     const pools = entries.map((e): Pool => {
       const pred = (a: string) => matchAccount(e.seg.sender.accounts, a) || allocAccounts.has(a);
-      return { account: e.seg.allocAccount!, balance: state.balances.total(e.key, pred), sources: state.sourceLineIds(e.key, pred) };
+      let balance = 0;
+      for (const [a, v] of reader.accounts(e.key)) if (pred(a)) balance += v;
+      return { account: e.seg.allocAccount!, balance, sources: reader.sources(e.key, pred) };
     });
     solveAndPost(cycle, poster, entries, pools);
     return;
@@ -141,11 +166,11 @@ function runIterative(cycle: AllocationCycle, poster: Poster, allocAccounts: Set
   // 配布は勘定ごとに解く。その勘定を送信勘定に含む送信者だけが、方程式に入る（P-03）
   const accounts = new Set<string>();
   for (const e of entries) {
-    for (const [a, v] of state.balances.accountsOf(e.key)) if (v !== 0 && matchAccount(e.seg.sender.accounts, a)) accounts.add(a);
+    for (const [a, v] of reader.accounts(e.key)) if (v !== 0 && matchAccount(e.seg.sender.accounts, a)) accounts.add(a);
   }
   for (const a of [...accounts].sort(compareId)) {
     const members = entries.filter((e) => matchAccount(e.seg.sender.accounts, a));
-    const pools = members.map((e): Pool => ({ account: a, balance: state.balances.get(e.key, a), sources: state.sourceLineIds(e.key, (x) => x === a) }));
+    const pools = members.map((e): Pool => ({ account: a, balance: reader.accounts(e.key).get(a) ?? 0, sources: reader.sources(e.key, (x) => x === a) }));
     solveAndPost(cycle, poster, members, pools);
   }
 }

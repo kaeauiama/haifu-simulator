@@ -3,7 +3,8 @@
  * 構造化複製できる素のオブジェクトで返す（Web Worker から Comlink で渡す）。
  * 画面は金額を計算しない（CLAUDE.md）。合計・差分・来歴はすべてこのクラスが返す。
  */
-import { describeRules, structuralEdges, type Method, type RuleKind } from './graph/rules.ts';
+import { buildMethodView, type MethodView, type ViewMethod } from './graph/methodView.ts';
+import { describeRules, structuralEdges, type Method, type RuleInfo, type RuleKind } from './graph/rules.ts';
 import type { ReadonlyBalanceIndex } from './ledger/balance.ts';
 import { MasterIndex, segmentLabel } from './ledger/masterIndex.ts';
 import { LineageTracer, UNATTRIBUTED } from './lineage/lineage.ts';
@@ -222,7 +223,9 @@ export class SimSession {
     const bal = this.snap(stepId);
     const prev = index > 0 ? this.snap(order[index - 1]!) : undefined;
     const { mi } = this;
+    const hasPcCycles = this.scenario.cycles.some((c) => c.context === 'PCTR');
     const keys = new Set<string>([
+      ...(hasPcCycles ? [...mi.profitCenters.keys()].map((id) => `PCTR:${id}`) : []),
       ...[...mi.costCenters.keys()].map((id) => `CCTR:${id}`),
       ...[...mi.wbs.keys()].map((id) => `WBS:${id}`),
       ...[...mi.segments.keys()].map((id) => `PSEG:${id}`),
@@ -292,37 +295,29 @@ export class SimSession {
    * フロー図（F7-01）。ノードは対象、線はルール（同じルール・同じ送信と受信の組は1本）。
    * 線はルールの定義から導き、実際に流れた組も足す。金額は選んだ時点までの累計。
    */
-  flowGraph(stepId: string): FlowGraph {
+  /** 選んだ時点までの流れ、ルールの状態、検証の重さ（フロー図と手法別ビューで使う） */
+  private flowIndex(stepId: string) {
     const order = this.result.stepOrder;
     const cursor = order.indexOf(stepId);
     if (cursor < 0) throw new Error(`step not found: ${stepId}`);
     const sc = this.scenario;
-    const issues = this.result.issues;
-
-    const nodeCounts = new Map<string, { errors: number; warnings: number }>();
     const ruleSeverity = new Map<string, 'ERROR' | 'WARNING'>();
-    for (const i of issues) {
-      if (i.obj) {
-        const c = nodeCounts.get(objKey(i.obj)) ?? { errors: 0, warnings: 0 };
-        if (i.severity === 'ERROR') c.errors++;
-        else if (i.severity === 'WARNING') c.warnings++;
-        nodeCounts.set(objKey(i.obj), c);
-      }
+    for (const i of this.result.issues) {
       if (i.ruleId && i.severity !== 'INFO' && ruleSeverity.get(i.ruleId) !== 'ERROR') ruleSeverity.set(i.ruleId, i.severity);
     }
-    const nodes: FlowNode[] = this.objectRows(stepId).map((o) => ({ ...o, ...(nodeCounts.get(o.key) ?? { errors: 0, warnings: 0 }) }));
-
     const stepIndex = new Map(sc.steps.map((s, i) => [s.id, i + 1]));
     const enabled = new Map(sc.steps.map((s) => [s.id, s.enabled]));
-    const rules = new Map(describeRules(sc).map((r) => [r.id, r]));
-    const stateOf = (ruleId: string): EdgeState => {
-      const steps = rules.get(ruleId)?.stepIds ?? [];
-      if (!steps.length) return 'unassigned';
-      const on = steps.filter((id) => enabled.get(id)).map((id) => stepIndex.get(id)!);
-      if (!on.length) return 'disabled';
-      return Math.min(...on) <= cursor ? 'done' : 'pending';
+    const rules = new Map<string, RuleInfo>(describeRules(sc).map((r) => [r.id, r]));
+    const firstEnabled = (ruleId: string): number | null => {
+      const on = (rules.get(ruleId)?.stepIds ?? []).filter((id) => enabled.get(id)).map((id) => stepIndex.get(id)!);
+      return on.length ? Math.min(...on) : null;
     };
-
+    const stateOf = (ruleId: string): EdgeState => {
+      if (!(rules.get(ruleId)?.stepIds ?? []).length) return 'unassigned';
+      const first = firstEnabled(ruleId);
+      if (first === null) return 'disabled';
+      return first <= cursor ? 'done' : 'pending';
+    };
     const amounts = new Map<string, number>();
     for (const l of this.result.ledger) {
       if (l.role !== 'RECEIVER' || !l.partner) continue;
@@ -331,6 +326,45 @@ export class SimSession {
       const k = `${l.origin.ruleId}|${objKey(l.partner)}|${objKey(l.obj)}`;
       amounts.set(k, (amounts.get(k) ?? 0) + l.amount);
     }
+    return {
+      cursor,
+      rules,
+      stateOf,
+      severityOf: (ruleId: string) => ruleSeverity.get(ruleId) ?? null,
+      amountOf: (ruleId: string, sender: string, receiver: string) => amounts.get(`${ruleId}|${sender}|${receiver}`) ?? 0,
+      /** ルールを実行する最初のステップの開始時点の残高。ステップがなければ選んだ時点 */
+      refSnapshot: (ruleId: string) => {
+        const first = firstEnabled(ruleId);
+        return this.snap(first === null ? stepId : order[first - 1]!);
+      },
+    };
+  }
+
+  /**
+   * フロー図（F7-01）。ノードは対象、線はルール（同じルール・同じ送信と受信の組は1本）。
+   * 線はルールの定義から導き、実際に流れた組も足す。金額は選んだ時点までの累計。
+   */
+  flowGraph(stepId: string): FlowGraph {
+    const fi = this.flowIndex(stepId);
+    const nodeCounts = new Map<string, { errors: number; warnings: number }>();
+    for (const i of this.result.issues) {
+      if (!i.obj) continue;
+      const c = nodeCounts.get(objKey(i.obj)) ?? { errors: 0, warnings: 0 };
+      if (i.severity === 'ERROR') c.errors++;
+      else if (i.severity === 'WARNING') c.warnings++;
+      nodeCounts.set(objKey(i.obj), c);
+    }
+    // 利益センタのノードは、その利益センタに導出される全対象の合計で見せる（P-23）
+    const order0 = this.result.stepOrder;
+    const idx = order0.indexOf(stepId);
+    const pcNow = totalsByProfitCenter(this.snap(stepId), this.mi);
+    const pcPrev = idx > 0 ? totalsByProfitCenter(this.snap(order0[idx - 1]!), this.mi) : new Map<string, number>();
+    const nodes: FlowNode[] = this.objectRows(stepId).map((o) => {
+      const pc = o.type === 'PCTR' ? { balance: pcNow.get(o.id) ?? 0, delta: (pcNow.get(o.id) ?? 0) - (pcPrev.get(o.id) ?? 0) } : {};
+      return { ...o, ...pc, ...(nodeCounts.get(o.key) ?? { errors: 0, warnings: 0 }) };
+    });
+    const { rules } = fi;
+    const order = this.result.stepOrder;
 
     const edges = new Map<string, FlowEdge>();
     const add = (ruleId: string, source: string, target: string) => {
@@ -345,18 +379,33 @@ export class SimSession {
         method: r.method,
         source,
         target,
-        amount: amounts.get(id) ?? 0,
-        state: stateOf(ruleId),
-        severity: ruleSeverity.get(ruleId) ?? null,
+        amount: fi.amountOf(ruleId, source, target),
+        state: fi.stateOf(ruleId),
+        severity: fi.severityOf(ruleId),
       });
     };
     const final = this.snap(order[order.length - 1]!);
-    for (const e of structuralEdges(sc, this.mi, final)) add(e.ruleId, objKey(e.sender), objKey(e.receiver));
+    for (const e of structuralEdges(this.scenario, this.mi, final)) add(e.ruleId, objKey(e.sender), objKey(e.receiver));
     for (const l of this.result.ledger) if (l.role === 'RECEIVER' && l.partner) add(l.origin.ruleId, objKey(l.partner), objKey(l.obj));
 
     // 線の端がノードにない（参照切れなど）ものは描けないので外す
     const known = new Set(nodes.map((n) => n.key));
     return { stepId, nodes, edges: [...edges.values()].filter((e) => known.has(e.source) && known.has(e.target)) };
+  }
+
+  /** 手法ごとの関係ビュー。focus はサイクルのビューで表示するサイクル */
+  methodView(method: ViewMethod, stepId: string, focus: string | null = null): MethodView {
+    const fi = this.flowIndex(stepId);
+    return buildMethodView(method, focus, {
+      scenario: this.scenario,
+      mi: this.mi,
+      cursor: this.snap(stepId),
+      refSnapshot: fi.refSnapshot,
+      snapshot: (id) => this.result.snapshots.get(id),
+      amount: fi.amountOf,
+      state: fi.stateOf,
+      severity: fi.severityOf,
+    });
   }
 
   /** オブジェクトの「勘定×ステップ」の残高表（F7-03） */

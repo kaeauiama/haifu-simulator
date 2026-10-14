@@ -22,3 +22,6 @@ export { findReferences, renameReference, type RefKind } from './edit/refs.ts';
 export * from './edit/codec.ts';
 export * from './graph/rules.ts';
 export { nextId, allRuleIds, accountRangeOf, dragOptions, applyDrag, createBlankRule, deleteRule, type DragTarget, type CreatedRule } from './edit/rules.ts';
+export * from './graph/methodView.ts';
+export { connectInCycle } from './edit/rules.ts';
+export * from './edit/relations.ts';

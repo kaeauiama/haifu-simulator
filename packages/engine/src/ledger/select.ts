@@ -57,3 +57,16 @@ export function selectObjects(sel: ObjSelector, mi: MasterIndex, balances?: Read
   }
   return [...seen.values()].sort(compareObj);
 }
+
+/** 利益センタ → その利益センタに導出される対象のキー（利益センタ間の配布・配賦、P-23） */
+export function profitCenterKeys(balances: ReadonlyBalanceIndex, mi: MasterIndex): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const k of balances.objectKeys()) {
+    const pc = mi.derivePC(parseObjKey(k));
+    if (!pc) continue;
+    const list = out.get(pc);
+    if (list) list.push(k);
+    else out.set(pc, [k]);
+  }
+  return out;
+}

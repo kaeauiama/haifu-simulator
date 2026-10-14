@@ -35,7 +35,7 @@ const firstAccount = (m: Master, c: AccountCategory) => m.accounts.find((a) => a
 
 /** 線を引いたときの選択肢 */
 export type DragTarget =
-  | { kind: 'NEW'; method: Method }
+  | { kind: 'NEW'; method: Method; activityType?: string }
   | { kind: 'ADD_TO_SEGMENT'; method: Method; cycleId: string; segmentId: string; label: string }
   | { kind: 'ADD_TO_SETTLEMENT'; method: 'SETTLEMENT'; ruleId: string }
   | { kind: 'ADD_TO_COSTING'; method: 'OVERHEAD_CALC'; sheetId: string };
@@ -132,7 +132,7 @@ export function applyDrag(p: Project, scenarioId: string, sender: ObjRef, receiv
       const cycle: AllocationCycle = {
         id,
         name: `${opts.stepName(method)} ${sender.id}`,
-        context: method === 'MA' ? 'MA' : 'CCTR',
+        context: method === 'MA' ? 'MA' : sender.type === 'PCTR' ? 'PCTR' : 'CCTR',
         type: method === 'DIST' ? 'DISTRIBUTION' : 'OVERHEAD',
         iterative: false,
         segments: [newSegment(m, method, sender, receiver)],
@@ -156,7 +156,11 @@ export function applyDrag(p: Project, scenarioId: string, sender: ObjRef, receiv
       break;
     }
     case 'ACTIVITY': {
-      const at = m.activityTypes.find((a) => a.rates.some((r) => r.cctr === sender.id)) ?? m.activityTypes[0];
+      const requested = target.activityType;
+      const at =
+        (requested ? m.activityTypes.find((a) => a.id === requested) : undefined) ??
+        m.activityTypes.find((a) => a.rates.some((r) => r.cctr === sender.id)) ??
+        m.activityTypes[0];
       if (!at) throw new Error('活動タイプがありません（マスタの活動タイプで作ってください）');
       const id = nextId(ID_PREFIX.ACTIVITY, ids);
       s.activityAllocs.push({ id, senderCctr: sender.id, activityType: at.id, receiver, quantity: 0 });
@@ -188,7 +192,7 @@ function newSegment(m: Master, method: Method, sender: ObjRef, receiver: ObjRef)
   const seg: AllocSegment = {
     id: 'SEG-01',
     name: sender.id,
-    sender: { objects: { type: 'CCTR', mode: 'LIST', ids: [sender.id] }, accounts: accountRangeOf(m, method === 'DIST' ? PRIMARY : COSTS), sharePct: 100 },
+    sender: { objects: { type: sender.type, mode: 'LIST', ids: [sender.id] }, accounts: accountRangeOf(m, method === 'DIST' ? PRIMARY : COSTS), sharePct: 100 },
     // 受信者を足していけるよう、既定は等分（固定比率 1）
     receiver: { objects: { type: receiver.type, mode: 'LIST', ids: [receiver.id] }, factor: { kind: 'FIXED_PORTION', weights: [{ obj: receiver, portion: 1 }] } },
   };
@@ -205,6 +209,39 @@ function addReceiver(seg: AllocSegment, receiver: ObjRef): void {
   else if (f.kind === 'FIXED_PORTION') f.weights.push({ obj: receiver, portion: 1 });
   const r = seg.receiver.objects;
   if (r.mode === 'LIST' && r.type === receiver.type && !r.ids.includes(receiver.id)) r.ids.push(receiver.id);
+}
+
+/**
+ * 表示中のサイクルに、送信 → 受信の関係を足す（手法別ビュー）。
+ * 送信者を個別に選んでいるセグメントがあれば受信者を足し、なければ送信者の新しいセグメントを作る。
+ */
+export function connectInCycle(p: Project, scenarioId: string, cycleId: string, sender: ObjRef, receiver: ObjRef): void {
+  const c = scenario(p, scenarioId).cycles.find((x) => x.id === cycleId);
+  if (!c) throw new Error(`cycle not found: ${cycleId}`);
+  const seg = c.segments.find((x) => x.sender.objects.mode === 'LIST' && x.sender.objects.type === sender.type && x.sender.objects.ids.includes(sender.id));
+  if (seg) {
+    if (!receiversOf(seg).some((r) => r.type === receiver.type && r.id === receiver.id)) addReceiver(seg, receiver);
+    return;
+  }
+  const created = newSegment(p.master, cycleMethod(c), sender, receiver);
+  // 送信者のない空のセグメント（追加したばかりのサイクル）があれば、それを使う
+  const empty = c.segments.findIndex((x) => x.sender.objects.mode === 'LIST' && x.sender.objects.ids.length === 0);
+  if (empty >= 0) {
+    const old = c.segments[empty]!;
+    created.id = old.id;
+    created.sender.accounts = old.sender.accounts.length ? old.sender.accounts : created.sender.accounts;
+    if (old.allocAccount) created.allocAccount = old.allocAccount;
+    if (c.type === 'DISTRIBUTION') delete created.allocAccount;
+    c.segments[empty] = created;
+    return;
+  }
+  created.id = nextId('SEG-', c.segments.map((x) => x.id));
+  if (c.type === 'DISTRIBUTION') delete created.allocAccount;
+  else if (!created.allocAccount) {
+    const acc = firstAccount(p.master, 'SEC42');
+    if (acc) created.allocAccount = acc;
+  }
+  c.segments.push(created);
 }
 
 /** 標準テンプレート（5.1）の中で、手法に合うステップ */
@@ -231,25 +268,26 @@ function assignToStep(s: Scenario, rule: CreatedRule, method: Method, receiver: 
 }
 
 /** 空のルールを作る（ルール一覧の「追加」）。ステップには入れない */
-export function createBlankRule(p: Project, scenarioId: string, kind: RuleKind, name: string): CreatedRule {
+export function createBlankRule(p: Project, scenarioId: string, kind: RuleKind, name: string, opts: { context?: AllocationCycle['context'] } = {}): CreatedRule {
   const s = scenario(p, scenarioId);
   const m = p.master;
   const id = nextId(ID_PREFIX[kind], allRuleIds(s));
   const cctr = m.costCenters[0]?.id ?? '';
   switch (kind) {
     case 'CYCLE':
+      const context = opts.context ?? 'CCTR';
       s.cycles.push({
         id,
         name,
-        context: 'CCTR',
+        context,
         type: 'OVERHEAD',
         iterative: false,
         segments: [
           {
             id: 'SEG-01',
             name: '',
-            sender: { objects: { type: 'CCTR', mode: 'LIST', ids: [] }, accounts: accountRangeOf(m, COSTS), sharePct: 100 },
-            receiver: { objects: { type: 'CCTR', mode: 'LIST', ids: [] }, factor: { kind: 'FIXED_PORTION', weights: [] } },
+            sender: { objects: { type: context === 'PCTR' ? 'PCTR' : 'CCTR', mode: 'LIST', ids: [] }, accounts: accountRangeOf(m, COSTS), sharePct: 100 },
+            receiver: { objects: { type: context === 'PCTR' ? 'PCTR' : context === 'MA' ? 'PSEG' : 'CCTR', mode: 'LIST', ids: [] }, factor: { kind: 'FIXED_PORTION', weights: [] } },
             ...(firstAccount(m, 'SEC42') ? { allocAccount: firstAccount(m, 'SEC42')! } : {}),
           },
         ],

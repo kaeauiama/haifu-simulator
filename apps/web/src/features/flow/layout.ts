@@ -38,3 +38,17 @@ export async function layoutGraph({ nodes, edges, width, height }: LayoutInput):
   });
   return new Map((res.children ?? []).map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0 }]));
 }
+
+const COLUMN_ORDER: ObjType[] = ['PCTR', 'CCTR', 'WBS', 'ORD', 'PSEG'];
+
+/** 種類ごとの列に並べる（列の中は渡された順）。自動配置の代わりに選べる */
+export function columnLayout({ nodes, width, height }: LayoutInput): Map<string, { x: number; y: number }> {
+  const cols = COLUMN_ORDER.filter((t) => nodes.some((n) => n.type === t));
+  const out = new Map<string, { x: number; y: number }>();
+  cols.forEach((t, c) => {
+    nodes
+      .filter((n) => n.type === t)
+      .forEach((n, i) => out.set(n.id, { x: c * width * 1.9, y: i * height * 1.45 }));
+  });
+  return out;
+}

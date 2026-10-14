@@ -1,7 +1,7 @@
 /**
  * ノード間に線を引いたときの手法の候補（6章）。組み合わせに合う手法と、足せる既存のルールだけを出す。
  */
-import { applyDrag, dragOptions, type CreatedRule, type DragTarget, type ObjRef } from '@alloc-sim/engine';
+import { applyDrag, dragOptions, type CreatedRule, type DragTarget, type Method, type ObjRef } from '@alloc-sim/engine';
 import { alertDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,6 +15,10 @@ export interface PendingConnection {
   receiver: ObjRef;
   senderLabel: string;
   receiverLabel: string;
+  /** 手法別ビューから開いたときは、そのビューの手法だけを候補にする */
+  methods?: Method[];
+  activityType?: string;
+  onCreated?: (r: CreatedRule) => void;
 }
 
 const optionLabel = (t: DragTarget): string => {
@@ -34,7 +38,11 @@ export function ConnectDialog({ pending, onClose }: { pending: PendingConnection
   const project = useProjectStore((s) => s.project);
   const scenarioId = useProjectStore((s) => s.scenarioId);
   const setUi = useUiStore((s) => s.set);
-  const options = pending ? dragOptions(project, scenarioId, pending.sender, pending.receiver) : [];
+  const options = pending
+    ? dragOptions(project, scenarioId, pending.sender, pending.receiver)
+        .filter((o) => !pending.methods || pending.methods.includes(o.method))
+        .map((o): DragTarget => (o.kind === 'NEW' && pending.activityType ? { ...o, activityType: pending.activityType } : o))
+    : [];
 
   const choose = async (target: DragTarget) => {
     if (!pending) return;
@@ -48,7 +56,9 @@ export function ConnectDialog({ pending, onClose }: { pending: PendingConnection
       await alertDialog(ja.flow.createError, [e instanceof Error ? e.message : String(e)]);
       return;
     }
-    if (created) setUi({ selectedRule: created.id, editingRule: created });
+    if (!created) return;
+    pending.onCreated?.(created);
+    setUi({ selectedRule: created.id, editingRule: created });
   };
 
   return (

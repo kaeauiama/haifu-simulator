@@ -2,7 +2,7 @@
  * 画面の文言（CLAUDE.md：画面の文言はここに集める）。
  * 検証メッセージの既定文言はエンジンの ISSUE_DEFS が持つ。
  */
-import type { AccountCategory, CostCenter, Method, ObjType, RuleKind, Severity, StepKind, WBSElement } from '@alloc-sim/engine';
+import type { AccountCategory, CostCenter, Method, ObjType, RuleKind, Severity, StepKind, ViewMethod, WBSElement, WeightBasis } from '@alloc-sim/engine';
 
 export const ja = {
   app: {
@@ -245,6 +245,41 @@ export const ja = {
     newName: (kind: string) => `新しい${kind}`,
   },
   sideTab: { rules: 'ルール', issues: '検証', totals: '集計' },
+  view: {
+    ALL: '全体',
+    CCTR_ALLOC: '原価センタ配賦',
+    PCTR_ALLOC: '利益センタ配賦',
+    MA: 'マージン分析',
+    SETTLEMENT: '決済',
+    ACTIVITY: '活動配分',
+    OVERHEAD_CALC: '間接費',
+    TDD: 'TDD',
+  } satisfies Record<ViewMethod | 'ALL', string>,
+  layout: { auto: '自動配置', columns: '種類ごとの列' },
+  relation: {
+    sender: '送信側',
+    receiver: '受信側',
+    onlyRelated: '関係のある対象だけ',
+    cycle: 'サイクル',
+    newCycle: 'サイクルを追加',
+    openRule: 'ルールを開く',
+    remove: '関係を外す',
+    share: '構成比',
+    amount: '流れた額',
+    perUnit: (rate: string, unit: string) => `${rate}円/${unit}`,
+    basis: {
+      PERCENT: '固定%',
+      PORTION: '固定比率',
+      SKF: '統計KF',
+      VARIABLE: '実績値',
+      PCT: '%',
+      EQUIV: '等価係数',
+      AMOUNT: '金額',
+      QUANTITY: '数量',
+      RATE: '率（%）',
+      REFERENCE: '参照額',
+    } satisfies Record<WeightBasis, string>,
+  },
   form: {
     name: '名前',
     context: 'コンテキスト',

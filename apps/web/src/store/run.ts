@@ -2,7 +2,7 @@
  * 計算結果のストアと、Worker との同期（7章「処理の流れ」）。
  * 画面で編集すると、300ミリ秒待ってから Worker に再計算を頼む。Worker は表示用の値を返し、画面はそれを出すだけ。
  */
-import { PRIMARY_STEP_ID, type FlowGraph, type LineageView, type ObjectTableView, type RunSummary, type StepView } from '@alloc-sim/engine';
+import { PRIMARY_STEP_ID, type FlowGraph, type LineageView, type MethodView, type ObjectTableView, type RunSummary, type StepView } from '@alloc-sim/engine';
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 import { engine } from '@/worker/client';
@@ -17,6 +17,7 @@ interface RunState {
   summary: RunSummary | null;
   stepView: StepView | null;
   flowGraph: FlowGraph | null;
+  methodView: MethodView | null;
   objectTable: ObjectTableView | null;
   lineage: LineageView | null;
   running: boolean;
@@ -29,6 +30,7 @@ export const useRunStore = create<RunState>()(() => ({
   summary: null,
   stepView: null,
   flowGraph: null,
+  methodView: null,
   objectTable: null,
   lineage: null,
   running: true,
@@ -105,6 +107,20 @@ export function useEngineSync(): void {
       cancelled = true;
     };
   }, [version, selectedObj]);
+
+  // 手法別ビューは、開いているときだけ作る
+  const flowView = useUiStore((s) => s.flowView);
+  const focus = useUiStore((s) => (s.flowView === 'ALL' ? null : (s.methodFocus[s.flowView] ?? null)));
+  useEffect(() => {
+    if (version < 0 || flowView === 'ALL') return;
+    let cancelled = false;
+    void engine.methodView(version, flowView, stepId, focus).then((v) => {
+      if (!cancelled && v) useRunStore.setState({ methodView: v });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [version, stepId, flowView, focus]);
 
   // 来歴は、来歴タブを開いているときだけ計算する（5.6「クリックされたときだけ行う」）
   useEffect(() => {

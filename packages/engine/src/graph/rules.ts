@@ -33,6 +33,7 @@ export function methodsFor(sender: ObjType, receiver: ObjType): Method[] {
     if (receiver === 'WBS') return ['DIST', 'ASSESS', 'ACTIVITY', 'OVERHEAD_CALC'];
     if (receiver === 'PSEG') return ['MA'];
   }
+  if (sender === 'PCTR' && receiver === 'PCTR') return ['DIST', 'ASSESS'];
   if (sender === 'WBS' && (receiver === 'CCTR' || receiver === 'WBS' || receiver === 'PSEG')) return ['SETTLEMENT'];
   if (sender === 'PSEG' && receiver === 'PSEG') return ['TDD'];
   return [];

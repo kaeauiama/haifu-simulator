@@ -145,7 +145,8 @@ function CycleForm({ id }: { id: string }) {
   const c = useScenario().cycles.find((x) => x.id === id)!;
   const edit = useRuleEdit<AllocationCycle>('CYCLE', id);
   const stepOptions = useStepOptions();
-  const receiverTypes: ObjType[] = c.context === 'MA' ? ['PSEG'] : ['CCTR', 'WBS'];
+  const receiverTypes: ObjType[] = c.context === 'MA' ? ['PSEG'] : c.context === 'PCTR' ? ['PCTR'] : ['CCTR', 'WBS'];
+  const senderType: ObjType = c.context === 'PCTR' ? 'PCTR' : 'CCTR';
   const editSeg = (i: number, recipe: (s: AllocSegment) => void) => edit((r) => recipe(r.segments[i]!));
 
   return (
@@ -156,12 +157,14 @@ function CycleForm({ id }: { id: string }) {
       <Field label={F.context}>
         <SelectCell
           value={c.context}
-          options={enumOptions(F.contextLabel, ['CCTR', 'MA'])}
+          options={enumOptions(F.contextLabel, ['CCTR', 'PCTR', 'MA'])}
           commit={(v) =>
             edit((r) => {
+              const wasPc = r.context === 'PCTR';
               r.context = v as AllocationCycle['context'];
-              const t: ObjType = v === 'MA' ? 'PSEG' : 'CCTR';
+              const t: ObjType = v === 'MA' ? 'PSEG' : v === 'PCTR' ? 'PCTR' : 'CCTR';
               for (const s of r.segments) {
+                if (wasPc !== (v === 'PCTR')) s.sender.objects = { type: v === 'PCTR' ? 'PCTR' : 'CCTR', mode: 'LIST', ids: [] };
                 s.receiver.objects = { type: t, mode: 'LIST', ids: [] };
                 s.receiver.factor = { kind: 'FIXED_PORTION', weights: [] };
               }
@@ -202,7 +205,7 @@ function CycleForm({ id }: { id: string }) {
             <TextCell className={boxed} value={seg.name} commit={(v) => editSeg(i, (s) => void (s.name = v))} />
           </Field>
           <Field label={F.sender}>
-            <SelectorEditor p={p} value={seg.sender.objects} types={['CCTR']} onChange={(v) => editSeg(i, (s) => void (s.sender.objects = v))} />
+            <SelectorEditor p={p} value={seg.sender.objects} types={[senderType]} onChange={(v) => editSeg(i, (s) => void (s.sender.objects = v))} />
           </Field>
           <Field label={F.senderAccounts}>
             <AccountRanges value={seg.sender.accounts} onChange={(v) => editSeg(i, (s) => void (s.sender.accounts = v))} />
@@ -265,8 +268,8 @@ function CycleForm({ id }: { id: string }) {
             r.segments.push({
               id: nextId('SEG-', r.segments.map((s) => s.id)),
               name: '',
-              sender: { objects: { type: 'CCTR', mode: 'LIST', ids: [] }, accounts: prev ? [...prev.sender.accounts] : [], sharePct: 100 },
-              receiver: { objects: { type: r.context === 'MA' ? 'PSEG' : 'CCTR', mode: 'LIST', ids: [] }, factor: { kind: 'FIXED_PORTION', weights: [] } },
+              sender: { objects: { type: r.context === 'PCTR' ? 'PCTR' : 'CCTR', mode: 'LIST', ids: [] }, accounts: prev ? [...prev.sender.accounts] : [], sharePct: 100 },
+              receiver: { objects: { type: r.context === 'MA' ? 'PSEG' : r.context === 'PCTR' ? 'PCTR' : 'CCTR', mode: 'LIST', ids: [] }, factor: { kind: 'FIXED_PORTION', weights: [] } },
               ...(r.type === 'OVERHEAD' ? { allocAccount: prev?.allocAccount ?? proj.master.accounts.find((a) => a.category === 'SEC42')?.id ?? '' } : {}),
             });
           })

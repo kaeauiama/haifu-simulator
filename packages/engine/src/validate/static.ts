@@ -50,7 +50,6 @@ export function validateStatic(project: Project, scenario: Scenario, mi: MasterI
   dupIds(scenario.cycles, 'サイクル', add);
   for (const c of scenario.cycles) {
     const ctx = { ruleId: c.id };
-    if (c.context === 'PCTR') add('X-UNSUPPORTED', `${c.name}（利益センタ間の配布・配賦は未決事項）`, ctx);
     const senderKeys = new Set<string>();
     for (const seg of c.segments) {
       const where = `${c.name}／${seg.name}`;
@@ -64,11 +63,12 @@ export function validateStatic(project: Project, scenario: Scenario, mi: MasterI
         const cat = seg.allocAccount ? mi.category(seg.allocAccount) : undefined;
         if (cat !== 'SEC42') add('V-02', `${where}（${seg.allocAccount ?? '未設定'}）`, ctx);
       }
-      // 送信側は原価センタだけ（WBS を送信側にできるかは要確認。MVPでは不可）
+      // 送信側は原価センタ（利益センタのコンテキストでは利益センタ）。WBS を送信側にできるかは要確認で、MVPでは不可
+      const senderType = c.context === 'PCTR' ? 'PCTR' : 'CCTR';
       if (seg.sender.objects.type === 'WBS') add('X-UNSUPPORTED', `${where}（WBSを配賦の送信側にする：要確認、MVPでは不可）`, ctx);
-      else if (seg.sender.objects.type !== 'CCTR') add('X-RECEIVER-TYPE', `${where} の送信側（${seg.sender.objects.type}）`, ctx);
+      else if (seg.sender.objects.type !== senderType) add('X-RECEIVER-TYPE', `${where} の送信側（${seg.sender.objects.type}）`, ctx);
 
-      const allowed = c.context === 'MA' ? ['PSEG'] : CCTR_CONTEXT_RECEIVERS;
+      const allowed = c.context === 'MA' ? ['PSEG'] : c.context === 'PCTR' ? ['PCTR'] : CCTR_CONTEXT_RECEIVERS;
       const f = seg.receiver.factor;
       const receiverTypes =
         f.kind === 'FIXED_PERCENT' || f.kind === 'FIXED_PORTION' ? f.weights.map((w) => w.obj.type) : [seg.receiver.objects.type];

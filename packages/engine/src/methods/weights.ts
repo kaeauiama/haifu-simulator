@@ -3,7 +3,7 @@
  */
 import type { ReadonlyBalanceIndex } from '../ledger/balance.ts';
 import { normalizeWeights, type Share } from '../ledger/rounding.ts';
-import { accountPred, selectObjects } from '../ledger/select.ts';
+import { accountPred, profitCenterKeys, selectObjects } from '../ledger/select.ts';
 import { objKey } from '../model/keys.ts';
 import type { AllocSegment, ObjRef } from '../model/types.ts';
 import type { Poster } from './context.ts';
@@ -75,7 +75,10 @@ export function resolveReceivers(seg: AllocSegment, ruleId: string, poster: Post
         base = snap;
       }
       const pred = accountPred(f.accounts);
-      for (const r of selectObjects(seg.receiver.objects, mi, base)) add(r, base.total(objKey(r), pred));
+      // 利益センタの受信者は、その利益センタに導出される全対象の残高で見る（P-23）
+      const byPc = seg.receiver.objects.type === 'PCTR' ? profitCenterKeys(base, mi) : null;
+      const weightOf = (r: ObjRef) => (byPc ? (byPc.get(r.id) ?? []).reduce((t, k) => t + base.total(k, pred), 0) : base.total(objKey(r), pred));
+      for (const r of selectObjects(seg.receiver.objects, mi, base)) add(r, weightOf(r));
       break;
     }
   }

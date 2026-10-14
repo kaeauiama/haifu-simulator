@@ -3,7 +3,7 @@
  * 最後に実行したセッションを持ち、画面からの問い合わせに表示用の値を返す。
  * version が古い問い合わせには null を返し、古い結果を画面に出さない。
  */
-import { SimSession, type Project } from '@alloc-sim/engine';
+import { SimSession, type Project, type ViewMethod } from '@alloc-sim/engine';
 import * as Comlink from 'comlink';
 
 let session: SimSession | null = null;
@@ -24,6 +24,9 @@ const api = {
   },
   flowGraph(v: number, stepId: string) {
     return current(v)?.flowGraph(stepId) ?? null;
+  },
+  methodView(v: number, method: ViewMethod, stepId: string, focus: string | null) {
+    return current(v)?.methodView(method, stepId, focus) ?? null;
   },
   objectTable(v: number, key: string) {
     return current(v)?.objectTable(key) ?? null;

@@ -7,7 +7,7 @@ import { useRunStore } from '@/store/run';
 import { useUiStore, type SideTab } from '@/store/ui';
 import { DetailTabs } from './balances/DetailTabs';
 import { IssuesPanel, TotalsPanel } from './balances/SummaryPanel';
-import { FlowView } from './flow/FlowView';
+import { FlowPanel } from './flow/FlowPanel';
 import { RuleDialog } from './rules/RuleDialog';
 import { RulesPanel } from './rules/RulesPanel';
 import { StepPanel } from './steps/StepPanel';
@@ -27,7 +27,7 @@ export function MainScreen() {
       </div>
       <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,3fr)_minmax(0,2fr)] gap-3">
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-background">
-          {error ? <p className="p-3 text-sm text-destructive">{`${ja.run.error}：${error}`}</p> : summary ? <FlowView /> : <p className="p-3 text-sm">{ja.app.loading}</p>}
+          {error ? <p className="p-3 text-sm text-destructive">{`${ja.run.error}：${error}`}</p> : summary ? <FlowPanel /> : <p className="p-3 text-sm">{ja.app.loading}</p>}
         </div>
         <div className="flex min-h-0 min-w-0 flex-col rounded-lg border bg-background p-3">
           <DetailTabs />

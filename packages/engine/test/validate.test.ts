@@ -128,13 +128,6 @@ describe('実行前検証（F6-01、5.5）', () => {
     expect(v16).not.toContain('C-200');
   });
 
-  it('利益センタ間の配布・配賦（未決事項）は、理由つきで実行しない', () => {
-    const c: AllocationCycle = { ...structuredClone(dist), context: 'PCTR' };
-    const r = withCycle(c);
-    expect(r.issues.find((i) => i.code === 'X-UNSUPPORTED')?.message).toContain('未決事項');
-    expect(linesOf(r, 'ST-A')).toHaveLength(0);
-  });
-
   it('WBSをUniversal Allocationの送信側にする組み方は、要確認としてMVPでは実行しない', () => {
     const c = structuredClone(dist);
     c.segments[0]!.sender.objects = { type: 'WBS', mode: 'LIST', ids: ['P-100'] };

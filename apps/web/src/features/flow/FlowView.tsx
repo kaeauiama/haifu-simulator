@@ -23,7 +23,7 @@ import { ja } from '@/i18n/ja';
 import { useRunStore } from '@/store/run';
 import { useUiStore } from '@/store/ui';
 import { ConnectDialog, type PendingConnection } from './ConnectDialog';
-import { layoutGraph } from './layout';
+import { columnLayout, layoutGraph } from './layout';
 import { ObjNode, type ObjFlowNode } from './ObjNode';
 import { RuleEdge, type RuleFlowEdge } from './RuleEdge';
 import { EDGE_STATE_STYLE, METHOD_COLOR } from './style';
@@ -51,23 +51,22 @@ function FlowCanvas() {
   const { fitView } = useReactFlow();
   const [pending, setPending] = useState<PendingConnection | null>(null);
 
+  const layoutMode = useUiStore((s) => s.flowLayout);
   const rem = presentation ? 22 : 16;
   const size = { width: Math.round(NODE_REM.w * rem), height: Math.round(NODE_REM.h * rem) };
 
   // 配置は、ノードと線のつながりが変わったときだけ計算し直す（金額が変わっただけでは動かさない）
-  const layoutKey = useMemo(() => (graph ? structureKey(graph, size.width) : ''), [graph, size.width]);
+  const layoutKey = useMemo(() => (graph ? `${layoutMode}#${structureKey(graph, size.width)}` : ''), [graph, size.width, layoutMode]);
   const [layout, setLayout] = useState<{ key: string; pos: Map<string, { x: number; y: number }> } | null>(null);
   useEffect(() => {
     if (!graph) return;
     let cancelled = false;
-    const pairs = uniquePairs(graph);
-    void layoutGraph({
-      nodes: graph.nodes.map((n) => ({ id: n.key, type: n.type })),
-      edges: pairs,
-      ...size,
-    }).then((pos) => {
-      if (!cancelled) setLayout({ key: layoutKey, pos });
-    });
+    const input = { nodes: graph.nodes.map((n) => ({ id: n.key, type: n.type })), edges: uniquePairs(graph), ...size };
+    if (layoutMode === 'columns') setLayout({ key: layoutKey, pos: columnLayout(input) });
+    else
+      void layoutGraph(input).then((pos) => {
+        if (!cancelled) setLayout({ key: layoutKey, pos });
+      });
     return () => {
       cancelled = true;
     };
@@ -78,7 +77,8 @@ function FlowCanvas() {
     if (!graph || !selectedRule) return null;
     const keys = new Set<string>();
     for (const e of graph.edges) if (e.ruleId === selectedRule) keys.add(e.source).add(e.target);
-    return keys;
+    // 消したルールなど、図にないルールを選んでいるときは薄くしない
+    return keys.size ? keys : null;
   }, [graph, selectedRule]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ObjFlowNode>([]);
@@ -112,11 +112,11 @@ function FlowCanvas() {
         type: 'rule' as const,
         source: e.source,
         target: e.target,
-        data: { ...e, parallelIndex, highlighted: e.ruleId === selectedRule, dimmed: selectedRule !== null && e.ruleId !== selectedRule },
+        data: { ...e, parallelIndex, highlighted: e.ruleId === selectedRule, dimmed: focus !== null && e.ruleId !== selectedRule },
         markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
       };
     });
-  }, [graph, selectedRule]);
+  }, [graph, selectedRule, focus]);
 
   const isValidConnection = (c: Connection | Edge) => {
     if (!c.source || !c.target || c.source === c.target) return false;
