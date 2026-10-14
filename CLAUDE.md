@@ -12,4 +12,5 @@
 - P-xx を変えるときは、対応するテストと一緒に変える。確定したら D-xxx に移す
 - Hard Constraint：データを外に送らない。engine は通信・ブラウザAPI・React に依存しない（packages/engine/test/guard.test.ts）。web の本番ビルドは CSP で通信先を自分自身に限る（apps/web/vite.config.ts）
 - 検証コードの重さと既定文言の単一ソースは packages/engine/src/validate/issues.ts。反復計算の上限などの定数は packages/engine/src/iterative/solve.ts を正とし、文書に数値を直書きしない
-- コマンド：`pnpm test` / `pnpm typecheck` / `pnpm sim`（CLI。オプションは packages/engine/src/cli.ts の冒頭）/ `pnpm dev`（画面）
+- コマンド：`pnpm test` / `pnpm typecheck` / `pnpm sim`（CLI。オプションは packages/engine/src/cli.ts の冒頭）/ `pnpm dev`（画面）/ `pnpm e2e`（本番ビルドを CSP 付きで E2E）/ `pnpm bench`（大きい規模の計測）
+- 図に描く線の上限は packages/engine/src/graph/limits.ts、自動配置の上限は apps/web/src/features/flow/layout.ts を正とする

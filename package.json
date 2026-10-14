@@ -11,6 +11,8 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "sim": "pnpm --filter @alloc-sim/engine sim",
     "dev": "pnpm --filter @alloc-sim/web dev",
-    "build": "pnpm --filter @alloc-sim/web build"
+    "build": "pnpm --filter @alloc-sim/web build",
+    "e2e": "pnpm --filter @alloc-sim/web e2e",
+    "bench": "pnpm --filter @alloc-sim/engine bench"
   }
 }
