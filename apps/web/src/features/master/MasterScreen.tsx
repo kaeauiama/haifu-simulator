@@ -100,6 +100,8 @@ function BasicForm() {
       {field(
         B.period,
         <NumberCell
+          plain
+          integer
           value={m.period}
           commit={(v) => {
             if (!Number.isInteger(v)) return ja.table.notInteger;

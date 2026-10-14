@@ -46,9 +46,9 @@ export function TextCell({ value, commit, placeholder, className, mono }: { valu
   );
 }
 
-/** 数値の入力。integer なら円の整数として読み、桁区切りで表示する */
-export function NumberCell({ value, commit, integer }: { value: number; commit: Commit<number>; integer?: boolean }) {
-  const show = (n: number) => (integer ? fmtYen(n) : String(n));
+/** 数値の入力。integer なら整数として読む。金額は桁区切りで表示し、期間などは plain で区切らない */
+export function NumberCell({ value, commit, integer, plain }: { value: number; commit: Commit<number>; integer?: boolean; plain?: boolean }) {
+  const show = (n: number) => (integer && !plain ? fmtYen(n) : String(n));
   const [draft, setDraft] = useState(show(value));
   useEffect(() => setDraft(show(value)), [value]);
   const done = async () => {

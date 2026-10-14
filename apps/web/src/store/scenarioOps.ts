@@ -1,17 +1,10 @@
 /**
  * シナリオとステップの編集。Immer の下書きに対して呼ぶ純粋な操作（金額は扱わない）。
  */
-import { DEFAULT_STEP_TEMPLATE, type ClosingStep, type Project, type Scenario, type StepKind } from '@alloc-sim/engine';
+import { DEFAULT_STEP_TEMPLATE, nextId, type ClosingStep, type Project, type Scenario, type StepKind } from '@alloc-sim/engine';
 import { current, isDraft } from 'immer';
 
-/** 既存の識別子と重ならない「prefix + 連番」 */
-export function nextId(prefix: string, existing: Iterable<string>): string {
-  const used = new Set(existing);
-  for (let n = 1; ; n++) {
-    const id = `${prefix}${String(n).padStart(2, '0')}`;
-    if (!used.has(id)) return id;
-  }
-}
+export { nextId };
 
 export function moveStep(s: Scenario, from: number, to: number): void {
   if (from === to || from < 0 || to < 0 || from >= s.steps.length || to >= s.steps.length) return;

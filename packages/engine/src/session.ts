@@ -3,6 +3,7 @@
  * 構造化複製できる素のオブジェクトで返す（Web Worker から Comlink で渡す）。
  * 画面は金額を計算しない（CLAUDE.md）。合計・差分・来歴はすべてこのクラスが返す。
  */
+import { describeRules, structuralEdges, type Method, type RuleKind } from './graph/rules.ts';
 import type { ReadonlyBalanceIndex } from './ledger/balance.ts';
 import { MasterIndex, segmentLabel } from './ledger/masterIndex.ts';
 import { LineageTracer, UNATTRIBUTED } from './lineage/lineage.ts';
@@ -110,6 +111,35 @@ export interface LineageView {
   unattributed: number;
 }
 
+/** 線の状態（選んだ時点に対して）：実行済み／まだ先／ステップがオフ／どのステップにも入っていない */
+export type EdgeState = 'done' | 'pending' | 'disabled' | 'unassigned';
+
+export interface FlowNode extends ObjectRow {
+  errors: number;
+  warnings: number;
+}
+
+export interface FlowEdge {
+  id: string;
+  ruleKind: RuleKind;
+  ruleId: string;
+  ruleName: string;
+  method: Method;
+  source: string;
+  target: string;
+  /** 選んだ時点までに、この線で流れた額 */
+  amount: Yen;
+  state: EdgeState;
+  /** ルールに出ている検証結果の重さ（情報は含めない） */
+  severity: 'ERROR' | 'WARNING' | null;
+}
+
+export interface FlowGraph {
+  stepId: string;
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
 const OBJ_ORDER: ObjType[] = ['PCTR', 'CCTR', 'WBS', 'ORD', 'PSEG'];
 
 export class SimSession {
@@ -185,23 +215,20 @@ export class SimSession {
     return { scenarioId: this.scenarioId, steps, issues: result.issues, primaryTotal, finalTotal, zeroSumOk: primaryTotal === finalTotal };
   }
 
-  /** ある時点（ステップ末）の残高。F5-02 の「各時点の残高」 */
-  stepView(stepId: string): StepView {
+  /** ある時点の対象ごとの残高と増減。マスタの対象は残高0でも出し、セグメントは台帳に現れたものも出す */
+  private objectRows(stepId: string): ObjectRow[] {
     const order = this.result.stepOrder;
     const index = order.indexOf(stepId);
-    if (index < 0) throw new Error(`step not found: ${stepId}`);
     const bal = this.snap(stepId);
     const prev = index > 0 ? this.snap(order[index - 1]!) : undefined;
     const { mi } = this;
-
-    // マスタの対象は残高0でも出す。セグメントは台帳に現れたものも出す
     const keys = new Set<string>([
       ...[...mi.costCenters.keys()].map((id) => `CCTR:${id}`),
       ...[...mi.wbs.keys()].map((id) => `WBS:${id}`),
       ...[...mi.segments.keys()].map((id) => `PSEG:${id}`),
     ]);
     for (const s of order) for (const k of this.snap(s).objectKeys()) keys.add(k);
-    const objects: ObjectRow[] = [...keys]
+    return [...keys]
       .map((key) => {
         const obj = parseObjKey(key);
         const balance = bal.total(key);
@@ -220,6 +247,16 @@ export class SimSession {
         };
       })
       .sort((a, b) => OBJ_ORDER.indexOf(a.type) - OBJ_ORDER.indexOf(b.type) || compareObj(a, b));
+  }
+
+  /** ある時点（ステップ末）の残高。F5-02 の「各時点の残高」 */
+  stepView(stepId: string): StepView {
+    const order = this.result.stepOrder;
+    const index = order.indexOf(stepId);
+    if (index < 0) throw new Error(`step not found: ${stepId}`);
+    const bal = this.snap(stepId);
+    const { mi } = this;
+    const objects = this.objectRows(stepId);
 
     const byProfitCenter = [...totalsByProfitCenter(bal, mi)]
       .sort(([a], [b]) => compareId(a, b))
@@ -249,6 +286,77 @@ export class SimSession {
       });
 
     return { stepId, index, objects, byProfitCenter, bySegment, grandTotal: bal.grandTotal(), lines };
+  }
+
+  /**
+   * フロー図（F7-01）。ノードは対象、線はルール（同じルール・同じ送信と受信の組は1本）。
+   * 線はルールの定義から導き、実際に流れた組も足す。金額は選んだ時点までの累計。
+   */
+  flowGraph(stepId: string): FlowGraph {
+    const order = this.result.stepOrder;
+    const cursor = order.indexOf(stepId);
+    if (cursor < 0) throw new Error(`step not found: ${stepId}`);
+    const sc = this.scenario;
+    const issues = this.result.issues;
+
+    const nodeCounts = new Map<string, { errors: number; warnings: number }>();
+    const ruleSeverity = new Map<string, 'ERROR' | 'WARNING'>();
+    for (const i of issues) {
+      if (i.obj) {
+        const c = nodeCounts.get(objKey(i.obj)) ?? { errors: 0, warnings: 0 };
+        if (i.severity === 'ERROR') c.errors++;
+        else if (i.severity === 'WARNING') c.warnings++;
+        nodeCounts.set(objKey(i.obj), c);
+      }
+      if (i.ruleId && i.severity !== 'INFO' && ruleSeverity.get(i.ruleId) !== 'ERROR') ruleSeverity.set(i.ruleId, i.severity);
+    }
+    const nodes: FlowNode[] = this.objectRows(stepId).map((o) => ({ ...o, ...(nodeCounts.get(o.key) ?? { errors: 0, warnings: 0 }) }));
+
+    const stepIndex = new Map(sc.steps.map((s, i) => [s.id, i + 1]));
+    const enabled = new Map(sc.steps.map((s) => [s.id, s.enabled]));
+    const rules = new Map(describeRules(sc).map((r) => [r.id, r]));
+    const stateOf = (ruleId: string): EdgeState => {
+      const steps = rules.get(ruleId)?.stepIds ?? [];
+      if (!steps.length) return 'unassigned';
+      const on = steps.filter((id) => enabled.get(id)).map((id) => stepIndex.get(id)!);
+      if (!on.length) return 'disabled';
+      return Math.min(...on) <= cursor ? 'done' : 'pending';
+    };
+
+    const amounts = new Map<string, number>();
+    for (const l of this.result.ledger) {
+      if (l.role !== 'RECEIVER' || !l.partner) continue;
+      const idx = stepIndex.get(l.stepId);
+      if (idx === undefined || idx > cursor) continue;
+      const k = `${l.origin.ruleId}|${objKey(l.partner)}|${objKey(l.obj)}`;
+      amounts.set(k, (amounts.get(k) ?? 0) + l.amount);
+    }
+
+    const edges = new Map<string, FlowEdge>();
+    const add = (ruleId: string, source: string, target: string) => {
+      const id = `${ruleId}|${source}|${target}`;
+      const r = rules.get(ruleId);
+      if (!r || edges.has(id) || source === target) return;
+      edges.set(id, {
+        id,
+        ruleKind: r.kind,
+        ruleId,
+        ruleName: r.name,
+        method: r.method,
+        source,
+        target,
+        amount: amounts.get(id) ?? 0,
+        state: stateOf(ruleId),
+        severity: ruleSeverity.get(ruleId) ?? null,
+      });
+    };
+    const final = this.snap(order[order.length - 1]!);
+    for (const e of structuralEdges(sc, this.mi, final)) add(e.ruleId, objKey(e.sender), objKey(e.receiver));
+    for (const l of this.result.ledger) if (l.role === 'RECEIVER' && l.partner) add(l.origin.ruleId, objKey(l.partner), objKey(l.obj));
+
+    // 線の端がノードにない（参照切れなど）ものは描けないので外す
+    const known = new Set(nodes.map((n) => n.key));
+    return { stepId, nodes, edges: [...edges.values()].filter((e) => known.has(e.source) && known.has(e.target)) };
   }
 
   /** オブジェクトの「勘定×ステップ」の残高表（F7-03） */

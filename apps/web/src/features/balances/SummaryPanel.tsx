@@ -18,12 +18,13 @@ const AMOUNT_COLS = (title: string): Col<AmountRow>[] => [
 const PC_COLS = AMOUNT_COLS(ja.totals.byPC);
 const SEG_COLS = AMOUNT_COLS(ja.totals.bySegment);
 
-export function SummaryPanel() {
+/** この時点の集計とゼロサム検査 */
+export function TotalsPanel() {
   const summary = useRunStore((s) => s.summary);
   const view = useRunStore((s) => s.stepView);
   if (!summary || !view) return null;
   return (
-    <section className="flex min-h-0 flex-col gap-3 overflow-auto">
+    <div className="space-y-3">
       <div className={cn('rounded-md border px-3 py-2 text-sm', summary.zeroSumOk ? 'border-emerald-300 bg-emerald-50' : 'border-destructive bg-destructive/10')}>
         <div className="font-medium">{summary.zeroSumOk ? ja.run.zeroSumOk : ja.run.zeroSumNg}</div>
         <div className="flex justify-between text-xs text-muted-foreground">
@@ -37,9 +38,13 @@ export function SummaryPanel() {
       </div>
       <DataTable rows={view.byProfitCenter} cols={PC_COLS} rowKey={(r) => r.key || '-'} />
       <DataTable rows={view.bySegment} cols={SEG_COLS} rowKey={(r) => r.key} />
-      <IssueList issues={summary.issues} />
-    </section>
+    </div>
   );
+}
+
+export function IssuesPanel() {
+  const summary = useRunStore((s) => s.summary);
+  return summary ? <IssueList issues={summary.issues} /> : null;
 }
 
 const SEVERITY_CLASS: Record<Issue['severity'], string> = {
@@ -59,8 +64,7 @@ function IssueList({ issues }: { issues: Issue[] }) {
   const shown = onlyUpToCursor ? issues.filter((i) => !i.stepId || i.phase === 'PRE' || order.indexOf(i.stepId) <= upTo) : issues;
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <h3 className="font-semibold">{ja.issues.heading}</h3>
+      <div className="flex items-center justify-end">
         <div className="flex gap-1 text-xs">
           <button type="button" className={cn('rounded px-1.5', !onlyUpToCursor && 'bg-muted font-medium')} onClick={() => setOnlyUpToCursor(false)}>
             {ja.issues.all}

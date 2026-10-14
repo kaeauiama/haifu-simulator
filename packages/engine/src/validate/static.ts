@@ -200,6 +200,13 @@ export function validateStatic(project: Project, scenario: Scenario, mi: MasterI
     });
   }
 
+  // ルールの識別子は種類をまたいでも重ねない（仕訳の origin.ruleId からルールを引くため）
+  const kinds = new Map<string, number>();
+  for (const xs of [scenario.cycles, scenario.tddRules, scenario.settlementRules, scenario.activityAllocs, scenario.costingSheets]) {
+    for (const id of new Set(xs.map((x) => x.id))) kinds.set(id, (kinds.get(id) ?? 0) + 1);
+  }
+  for (const [id, n] of kinds) if (n > 1) add('X-DUP-ID', `ルール ${id}（種類の違うルールで同じ識別子）`, { ruleId: id });
+
   // ---------- 締めステップ ----------
   dupIds(scenario.steps, '締めステップ', add);
   const collections: Record<StepKind, readonly { id: string }[] | null> = {

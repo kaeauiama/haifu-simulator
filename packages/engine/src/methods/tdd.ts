@@ -2,12 +2,48 @@
  * TDD（Top-Down Distribution）。粗いセグメントの残高を、参照データの構成比で細かいセグメントへ配る（5.2）。
  * 勘定は送信と同じ。粗いセグメントを貸方、細かいセグメントを借方にする。
  */
+import type { ReadonlyBalanceIndex } from '../ledger/balance.ts';
+import type { MasterIndex } from '../ledger/masterIndex.ts';
 import { normalizeWeights, allocate } from '../ledger/rounding.ts';
 import { accountPred, selectObjects } from '../ledger/select.ts';
 import { CHAR_KEYS } from '../model/schema.ts';
 import { compareId, objKey, parseObjKey, parseSegmentKey, segmentKey } from '../model/keys.ts';
 import type { ObjRef, SegmentChars, TDDRule } from '../model/types.ts';
 import type { Poster } from './context.ts';
+
+/** 細分化する特性がまだ未設定のセグメントだけが送信者になる（P-06） */
+export function tddSenders(rule: TDDRule, mi: MasterIndex, balances?: ReadonlyBalanceIndex): ObjRef[] {
+  return selectObjects(rule.sender.segments, mi, balances).filter((s) => {
+    if (s.type !== 'PSEG') return false;
+    const c = parseSegmentKey(s.id);
+    return rule.distributeChars.every((k) => c[k] === undefined);
+  });
+}
+
+/**
+ * 送信セグメントの受信者と参照額（P-06）。参照データは、細分化する特性が設定済みで、
+ * 送信者が設定している特性が一致するセグメント。受信者は送信者の特性に参照の細分化特性の値を足したもの。
+ */
+export function tddReferenceWeights(rule: TDDRule, senderId: string, balances: ReadonlyBalanceIndex): Map<string, number> {
+  const sc = parseSegmentKey(senderId);
+  const refPred = accountPred(rule.reference.accounts);
+  const distribute = new Set(rule.distributeChars);
+  const out = new Map<string, number>();
+  for (const k of balances.objectKeys()) {
+    if (!k.startsWith('PSEG:')) continue;
+    const rid = parseObjKey(k).id;
+    const rc = parseSegmentKey(rid);
+    if (!rule.distributeChars.every((c) => rc[c] !== undefined)) continue;
+    if (!CHAR_KEYS.every((c) => distribute.has(c) || sc[c] === undefined || rc[c] === sc[c])) continue;
+    const v = balances.total(k, refPred);
+    if (v === 0) continue;
+    const recvChars: SegmentChars = { ...sc };
+    for (const c of rule.distributeChars) recvChars[c] = rc[c]!;
+    const rk = `PSEG:${segmentKey(recvChars)}`;
+    out.set(rk, (out.get(rk) ?? 0) + v);
+  }
+  return out;
+}
 
 export function runTDD(rule: TDDRule, poster: Poster): void {
   const { mi, state, stepStart, blocked } = poster.ctx;
@@ -20,38 +56,16 @@ export function runTDD(rule: TDDRule, poster: Poster): void {
     for (const obj of attributed) poster.issue('V-09', `${rule.name}：${mi.label(obj)}`, { ruleId: rule.id, obj });
     return;
   }
-  // 細分化する特性がまだ未設定のセグメントだけが送信者になる（P-06）
-  const senders = selected.filter((s) => {
-    const c = parseSegmentKey(s.id);
-    return rule.distributeChars.every((k) => c[k] === undefined);
-  });
-
+  const senders = tddSenders(rule, mi, state.balances);
   const sendPred = accountPred(rule.sender.accounts);
-  const refPred = accountPred(rule.reference.accounts);
-  const refSegments = [...stepStart.objectKeys()].filter((k) => k.startsWith('PSEG:')).map((k) => parseObjKey(k).id);
-  const distribute = new Set(rule.distributeChars);
 
   for (const sender of senders) {
     const sKey = objKey(sender);
     const accounts = [...state.balances.accountsOf(sKey)].filter(([a, v]) => sendPred(a) && v !== 0);
     if (!accounts.length) continue;
     accounts.sort(([a], [b]) => compareId(a, b));
-    const sc = parseSegmentKey(sender.id);
 
-    // 参照データ：細分化する特性が設定済みで、送信者が設定している特性が一致するセグメント
-    const refByReceiver = new Map<string, number>();
-    for (const rid of refSegments) {
-      const rc = parseSegmentKey(rid);
-      if (!rule.distributeChars.every((k) => rc[k] !== undefined)) continue;
-      if (!CHAR_KEYS.every((k) => distribute.has(k) || sc[k] === undefined || rc[k] === sc[k])) continue;
-      const v = stepStart.total(`PSEG:${rid}`, refPred);
-      if (v === 0) continue;
-      const recvChars: SegmentChars = { ...sc };
-      for (const k of rule.distributeChars) recvChars[k] = rc[k]!;
-      const rk = `PSEG:${segmentKey(recvChars)}`;
-      refByReceiver.set(rk, (refByReceiver.get(rk) ?? 0) + v);
-    }
-    const norm = normalizeWeights([...refByReceiver].map(([key, weight]) => ({ key, weight })));
+    const norm = normalizeWeights([...tddReferenceWeights(rule, sender.id, stepStart)].map(([key, weight]) => ({ key, weight })));
     if (!norm) {
       poster.issue('V-10', `${rule.name}：${mi.label(sender)}`, { ruleId: rule.id, obj: sender });
       continue;

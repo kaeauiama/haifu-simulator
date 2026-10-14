@@ -22,6 +22,9 @@ const api = {
   stepView(v: number, stepId: string) {
     return current(v)?.stepView(stepId) ?? null;
   },
+  flowGraph(v: number, stepId: string) {
+    return current(v)?.flowGraph(stepId) ?? null;
+  },
   objectTable(v: number, key: string) {
     return current(v)?.objectTable(key) ?? null;
   },

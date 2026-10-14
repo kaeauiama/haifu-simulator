@@ -2,7 +2,7 @@
  * 計算結果のストアと、Worker との同期（7章「処理の流れ」）。
  * 画面で編集すると、300ミリ秒待ってから Worker に再計算を頼む。Worker は表示用の値を返し、画面はそれを出すだけ。
  */
-import { PRIMARY_STEP_ID, type LineageView, type ObjectTableView, type RunSummary, type StepView } from '@alloc-sim/engine';
+import { PRIMARY_STEP_ID, type FlowGraph, type LineageView, type ObjectTableView, type RunSummary, type StepView } from '@alloc-sim/engine';
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
 import { engine } from '@/worker/client';
@@ -16,6 +16,7 @@ interface RunState {
   version: number;
   summary: RunSummary | null;
   stepView: StepView | null;
+  flowGraph: FlowGraph | null;
   objectTable: ObjectTableView | null;
   lineage: LineageView | null;
   running: boolean;
@@ -27,6 +28,7 @@ export const useRunStore = create<RunState>()(() => ({
   version: -1,
   summary: null,
   stepView: null,
+  flowGraph: null,
   objectTable: null,
   lineage: null,
   running: true,
@@ -80,8 +82,8 @@ export function useEngineSync(): void {
     if (version < 0) return;
     let cancelled = false;
     void (async () => {
-      const view = await engine.stepView(version, stepId);
-      if (!cancelled && view) useRunStore.setState({ stepView: view });
+      const [view, graph] = await Promise.all([engine.stepView(version, stepId), engine.flowGraph(version, stepId)]);
+      if (!cancelled && view && graph) useRunStore.setState({ stepView: view, flowGraph: graph });
     })();
     return () => {
       cancelled = true;
