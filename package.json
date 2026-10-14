@@ -1,0 +1,16 @@
+{
+  "name": "sap-alloc-sim",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "sim": "pnpm --filter @alloc-sim/engine sim",
+    "dev": "pnpm --filter @alloc-sim/web dev",
+    "build": "pnpm --filter @alloc-sim/web build"
+  }
+}

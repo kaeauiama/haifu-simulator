@@ -1,0 +1,560 @@
+# S/4HANA Cloud 配賦・決済シミュレータ 要件定義・設計書
+
+Oct 13, 2026 · @Kaz
+
+> 改訂 2026-10-14：M0〜M2 の実装で確定した決定を反映した（[decisions.md](decisions.md) の D-016〜D-018）。この文書と Decision Log が食い違うときは、新しい決定を正とし、この文書も直す。
+
+## 1. 目的と前提
+
+設計ワークショップの場で、配賦・決済の組み方を描き、金額を流して、パターン同士を比べられるブラウザツールを作る。SAPには接続しない単独ツールとし、結果はSAPの考え方に沿った「もどき」の仕訳で示す。
+
+**利用シーン**
+
+- コンサルが顧客と画面を共有し、その場でフローを描き替えて結果を見せる
+- 「TDDを決済の前に回したらどうなるか」「配布と配賦のどちらにするか」を、数字で比較する
+- 合意したパターンを、設定検討のインプット（サイクル定義、決済規則一覧）として出力する
+
+**前提**
+
+| 項目 | 前提 |
+| --- | --- |
+| 製品 | SAP S/4HANA Cloud Public Edition |
+| 収益性分析 | マージン分析（勘定ベース）。原価ベースは扱わない |
+| 会社 | 1管理領域・1会社コード・1通貨（JPY）。会社間配賦はなし |
+| 期間 | 1会計期間の実績を対象とする。計画は将来拡張 |
+| 勘定科目 | YCOAを模した架空の科目表を同梱し、編集もできる |
+| 決済 | 管理会計上の決済（原価センタ、収益性セグメント、他WBS・指図への決済）に限る。資産やGLへの決済は扱わない |
+
+**スコープ外**
+
+- SAPへの接続、設定の自動生成と転送
+- 製造指図、品目原価計算、仕掛品、差異計算
+- 会社間配賦、外貨、並行元帳
+- 予算管理、コミットメント
+- 多人数での同時編集（MVPでは1人が操作し、画面を共有する）
+
+## 2. ドメイン前提（Public Cloudの手法と制約）
+
+ツールが扱う手法は、Public Cloudで実際に組める7種に絞る。周期的な配賦はUniversal Allocationに一本化されている。そのため、旧来の配賦（KSU5）、配布（KSV5）、TDD（KE28）は、Universal Allocationの「配賦タイプ」として扱う。
+
+| 手法 | SAP上の実体 | 送信側 | 受信側 | 送信・受信の勘定 | 配分基準 |
+| --- | --- | --- | --- | --- | --- |
+| 配布（Distribution） | Universal Allocation／原価センタ・利益センタ | 原価センタ、利益センタ | 原価センタ、利益センタ、WBS | 元の一次勘定のまま | 固定%、固定比率、統計KF、実績値 |
+| 配賦（Overhead Allocation） | Universal Allocation／原価センタ・利益センタ | 原価センタ、利益センタ | 原価センタ、利益センタ、WBS | 配賦用の二次勘定（カテゴリ42） | 同上 |
+| マージン分析への配賦・配布 | Universal Allocation／マージン分析 | 原価センタ | 収益性セグメント | 配賦なら二次勘定、配布なら元の勘定 | 同上 |
+| TDD（Top-Down Distribution） | Universal Allocation／マージン分析 | 粗い収益性セグメント | 細かい収益性セグメント | 元の勘定のまま | 参照データ（実績売上など） |
+| 直接活動配分 | Manage Direct Activity Allocation | 原価センタ×活動タイプ | 原価センタ、WBS、指図 | 活動配分用の二次勘定（カテゴリ43） | 数量×原価レート |
+| 間接費計算 | 原価計算シート（WBS・指図） | 原価センタ（貸方） | WBS、指図 | 間接費用の二次勘定（カテゴリ41） | ベース勘定×率 |
+| 決済 | 決済規則（WBS・指図） | WBS、指図 | 原価センタ、収益性セグメント、WBS、指図 | 決済用の二次勘定（カテゴリ21）または元の勘定 | 分配規則の%、等価係数、金額 |
+
+**計算結果を左右するPublic Cloudの制約**（モデル化の対象。各項目に出典を付ける）
+
+- 期末処理は「Schedule Overhead Accounting Jobs」のジョブテンプレートで順に実行する。この順番が締めステップの実体になる（[KBA 2893403](https://userapps.support.sap.com/sap/support/knowledge/en/2893403)）
+- 配布は一次勘定を受信側にそのまま見せる。配賦は二次勘定に置き換える（[SAP Learning](https://learning.sap.com/learning-journeys/evaluating-overhead-cost-accounting-in-sap-s-4hana/differentiating-between-distribution-and-overhead-allocation_d3bcfcf4-62f7-40b7-a05c-feaf4ff542c6)）
+- TDDの前に、原価センタからマージン分析への配賦を流せる。ただし、属性として導出された収益性セグメント（顧客プロジェクトなど）はTDDの対象にできない（[SAP Community](https://blogs.sap.com/2021/11/09/top-down-distribution-in-sap-s-4hana/)）
+- 決済規則を変えて同じ期間に再決済しても、決済履歴があれば古い受信者に流れる。新しい受信者に流すには取消が要る（[KBA 3071059](https://userapps.support.sap.com/sap/support/knowledge/en/3071059)）
+- 原価センタの実績原価レートは計算できる（実績原価レート計算）。計画レートとの差額は再評価で配り直す（[KBA 3777535](https://userapps.support.sap.com/sap/support/knowledge/en/3777535)）
+- 顧客プロジェクトでは、売上と原価がWBSに属性として導出された収益性セグメントへ即時に流れる。収益認識はイベントベース収益認識（EBRR）が担う（[SAP Community](https://blogs.sap.com/2018/06/26/financial-accounting-for-customer-projects-in-sap-s4hana-cloud-part-1-real-time-insights-in-project-based-service-scenario)）
+
+**要確認（ワークショップ前にテナントで確かめる）**
+
+- WBSをUniversal Allocationの送信側にできるか。MVPでは不可として扱う
+- 原価計算シートを顧客側でどこまで変えられるか
+- 間接活動配分を使えるか。MVPでは直接活動配分だけを扱う
+
+## 3. 機能要件
+
+要件は9領域、43項目に分ける。IDは開発時のタスク名やテスト名として使う。MVPに入れるものに「M」を付けた。
+
+### 3.1 マスタ（F1）
+
+- F1-01 M 管理領域、会社コード、通貨、会計期間を1組だけ持つ
+- F1-02 M 勘定科目表を持つ。一次原価、収益、二次原価（カテゴリ21・41・42・43）を区別する。YCOA風の初期セットを同梱する（下表）
+- F1-03 M 利益センタを持つ。階層（グループ）も持つ
+- F1-04 M 原価センタを持つ。利益センタの割当、原価センタ区分（管理・製造・販売など）、階層も持つ
+- F1-05 M WBS要素を持つ。プロジェクト区分（間接費プロジェクト、顧客プロジェクト）、責任原価センタ、利益センタ、統計か実績かも持つ。顧客プロジェクトには、属性として導出される収益性セグメントを持たせる
+- F1-06 M 活動タイプと原価レート（計画）を持つ
+- F1-07 M 統計KFと、その期間値（オブジェクト別）を持つ
+- F1-08 M 収益性セグメントの特性を定義する（顧客、顧客グループ、製品、製品グループ、地域）。特性値の組み合わせとして、セグメントを持つ
+- F1-09 指図（内部指図）を持つ。MVPではWBSで代用する
+
+**同梱する勘定科目（YCOA風の架空値）**
+
+| 勘定 | 名称 | 区分 |
+| --- | --- | --- |
+| 41000000 | 製品売上高 | 収益 |
+| 41200000 | 役務売上高 | 収益 |
+| 50000000 | 売上原価 | 一次原価 |
+| 61000000 | 給与手当 | 一次原価 |
+| 61200000 | 法定福利費 | 一次原価 |
+| 63000000 | 旅費交通費 | 一次原価 |
+| 64000000 | 地代家賃 | 一次原価 |
+| 65000000 | 減価償却費 | 一次原価 |
+| 66000000 | 外注費 | 一次原価 |
+| 67000000 | 通信費 | 一次原価 |
+| 68000000 | 運賃 | 一次原価 |
+| 94100000 | 配賦（間接費配賦） | 二次原価・カテゴリ42 |
+| 94200000 | 間接費計算 | 二次原価・カテゴリ41 |
+| 94300000 | 活動配分 | 二次原価・カテゴリ43 |
+| 94900000 | 決済 | 二次原価・カテゴリ21 |
+
+番号の体系はYCOAに寄せているが、実在の科目番号とは一致しない。画面上でも「もどき」と明示する。
+
+### 3.2 期中実績（F2）
+
+- F2-01 M 一次仕訳を入力する（対象、勘定、金額。顧客プロジェクトの売上もここで入れる）
+- F2-02 M CSVで取り込み、CSVで書き出す
+- F2-03 M サンプル会社のデータを生成する（8章のシナリオ）
+- F2-04 統計KFの値を、実績から自動で集計する（例：人数、面積）
+
+### 3.3 フロー定義（F3）
+
+- F3-01 M Universal Allocationのサイクルを定義する。項目は、コンテキスト（原価センタ・利益センタ・マージン分析）、タイプ（配布・配賦・TDD）、セグメント、送信側と受信側の選択（単体・範囲・グループ）、送信勘定、配賦勘定、送信割合（%）、配分基準
+- F3-02 M 決済規則を定義する。分配規則（受信者、%・等価係数・金額、決済タイプ、有効期間）と決済プロファイル（許容される受信者）を持つ
+- F3-03 M 直接活動配分を定義する（送信原価センタ、活動タイプ、受信者、数量）
+- F3-04 M 間接費計算を定義する（ベース勘定の範囲、率、貸方原価センタ、対象WBS）
+- F3-05 M TDDのルールを定義する（細分化する特性、参照データ＝勘定範囲と期間、保持する特性）
+- F3-06 手動の振替（Reassign Costs and Revenues相当）を、ステップの一つとして入れる
+
+### 3.4 締めステップ（F4）
+
+- F4-01 M 締めを、順番付きのステップのリストとして持つ。1ステップに、同じ種類のジョブ（サイクル群、決済対象群など）を入れる
+- F4-02 M ドラッグで並べ替える。ステップごとにオン・オフを切り替える
+- F4-03 M 標準の並び（5.1の既定順）をテンプレートとして持つ
+- F4-04 M 順序を変えたことで結果が変わったステップを、比較画面で示す
+
+### 3.5 シミュレーション（F5）
+
+- F5-01 M 全ステップを一括で実行する
+- F5-02 M 1ステップずつ実行し、各時点の残高を見る（巻き戻しも可）
+- F5-03 M ステップごとに仕訳を生成する。各仕訳は、どのルールのどの行から生まれたかを持つ
+- F5-04 M 1サイクル内の反復配賦（送信側同士の相互配賦）を、収束計算で解く
+- F5-05 M 実績原価レートを計算し、再評価の差額を配る（任意ステップ）
+- F5-06 送信割合が100%未満のとき、残高を残したまま次のステップに進む
+
+### 3.6 検証（F6）
+
+- F6-01 M 実行前と実行後に検証を回し、エラー・警告・情報で示す（5.5の規則一覧）
+- F6-02 M 締め後に残高が残った原価センタやWBSを、「未配分」として示す
+- F6-03 M 最終的な利益センタ別・セグメント別の結果が、入力合計と一致することを確かめる（ゼロサム検査）
+
+### 3.7 可視化（F7）
+
+- F7-01 M オブジェクトをノード、フローをエッジとして描く（6章）
+- F7-02 M 金額の流れをサンキー図で描く。ステップで絞り込める
+- F7-03 M オブジェクトを選ぶと、そのオブジェクトの「勘定×ステップ」の残高表を出す
+- F7-04 M 1つの金額を選ぶと、それが元のどの一次仕訳から来たかを辿る（来歴）
+
+### 3.8 シナリオ（F8）
+
+- F8-01 M シナリオを複製し、名前を付けて保存する
+- F8-02 M 2つのシナリオを並べ、利益センタ別・セグメント別・勘定別の差を示す。勘定別は、マージン分析上（セグメントと顧客プロジェクト）の勘定別で比べる（全対象の勘定別合計は、配賦・決済がゼロサムのため案によらず変わらない）
+- F8-03 シナリオごとにメモ（採用理由、懸念）を書く
+
+### 3.9 入出力（F9）
+
+- F9-01 M プロジェクト全体（マスタ、実績、フロー、ステップ、シナリオ）をJSONで保存し、読み込む
+- F9-02 M 作業中のデータを、ブラウザ内（IndexedDB）に自動保存する
+- F9-03 M サイクル定義と決済規則の一覧を、Excelで書き出す（設定検討のインプット）
+- F9-04 シミュレーション結果の仕訳を、CSVで書き出す
+
+### 3.10 非機能
+
+- 規模：オブジェクト500件、一次仕訳1万行、ステップ15件を、1秒以内に再計算する
+- 動作：静的なWebアプリとし、サーバを持たない。データは外に送らない（顧客データを扱うため）
+- 表示：日本語UI。金額は円で、桁区切りを付ける。プロジェクタに映して読める文字の大きさにする
+- 正確さ：計算エンジンは、UIから切り離した純粋な関数とし、単体テストで守る
+
+## 4. データモデル
+
+データは3層に分ける。全シナリオで共有する「マスタ」と「期中実績」、シナリオごとに持つ「フローとステップ」、実行のたびに作り直す「結果」である。結果は保存しない。いつでも再計算できるからだ。
+
+| 層 | 中身 | 保存 |
+| --- | --- | --- |
+| 共有 | マスタ、勘定科目、統計KF値、一次仕訳 | する |
+| シナリオ | サイクル、決済規則、活動配分、間接費、TDDルール、締めステップ、メモ | する（シナリオごと） |
+| 結果 | 生成仕訳、ステップ別残高、検証結果 | しない（再計算） |
+
+**設計上の要点**
+
+- CO対象は、型と識別子の組（ObjRef）で表す。収益性セグメントの識別子は、特性値を決まった順に連結した文字列とする（未設定は「\*」）
+- 利益センタは、仕訳のたびに対象から導出する。原価センタとWBSは自身の割当から、セグメントは特性の利益センタから取る。これで、組み替えによるPC別損益の変化がそのまま出る
+- 金額は、円の整数（JPY）で持つ。按分の端数は最大剰余法で配り、合計を必ず一致させる
+- 生成仕訳は、元になった仕訳のIDとルールの行を持つ。来歴（F7-04）は、これを逆向きに辿って計算する
+
+**型定義（TypeScript。Claude Codeでの実装の起点）**
+
+```ts
+// ---------- 共通 ----------
+type ObjType = 'CCTR' | 'PCTR' | 'WBS' | 'ORD' | 'PSEG';
+type ObjRef = { type: ObjType; id: string };
+type Yen = number; // 整数。借方+、貸方-
+
+// ---------- マスタ ----------
+type AccountCategory = 'REVENUE' | 'PRIMARY' | 'SEC21' | 'SEC41' | 'SEC42' | 'SEC43';
+interface GLAccount { id: string; name: string; category: AccountCategory }
+
+interface ProfitCenter { id: string; name: string; groupId?: string }
+interface CostCenter  { id: string; name: string; profitCenter: string; kind: 'ADMIN' | 'PROD' | 'SALES' | 'SERVICE'; groupId?: string }
+interface WBSElement {
+  id: string; name: string; projectType: 'OVERHEAD' | 'CUSTOMER';
+  responsibleCctr: string; profitCenter: string; statistical: boolean;
+  attributedSegment?: string;   // 顧客プロジェクトのみ。PSEGのid
+  settlementProfileId?: string;
+}
+interface ActivityType { id: string; name: string; unit: string; allocAccount: string; rates: { cctr: string; planRate: Yen }[] }
+interface StatKeyFigure { id: string; name: string; unit: string; values: { obj: ObjRef; value: number }[] }
+
+type CharKey = 'customer' | 'customerGroup' | 'product' | 'productGroup' | 'region' | 'profitCenter';
+interface ProfitabilitySegment { id: string; chars: Partial<Record<CharKey, string>>; attributed: boolean }
+
+// 期中実績（一次仕訳）
+interface PrimaryPosting { id: string; account: string; obj: ObjRef; amount: Yen; text?: string }
+
+// ---------- 選択条件 ----------
+type ObjSelector =
+  | { type: ObjType; mode: 'LIST';  ids: string[] }
+  | { type: ObjType; mode: 'RANGE'; from: string; to: string }
+  | { type: ObjType; mode: 'GROUP'; groupId: string }
+  | { type: 'PSEG';  mode: 'FILTER'; chars: Partial<Record<CharKey, string | '*'>> };
+type AccountSelector = { from: string; to: string }[];
+
+// ---------- Universal Allocation ----------
+type TracingFactor =
+  | { kind: 'FIXED_PERCENT'; weights: { obj: ObjRef; pct: number }[] }
+  | { kind: 'FIXED_PORTION'; weights: { obj: ObjRef; portion: number }[] }
+  | { kind: 'SKF'; skfId: string }
+  | { kind: 'VARIABLE'; accounts: AccountSelector; asOfStep?: string }; // 受信側の実績額で按分
+
+interface AllocSegment {
+  id: string; name: string;
+  sender: { objects: ObjSelector; accounts: AccountSelector; sharePct: number }; // sharePct: 送信割合
+  receiver: { objects: ObjSelector; factor: TracingFactor };
+  allocAccount?: string; // 配賦タイプで必須（SEC42）
+}
+interface AllocationCycle {
+  id: string; name: string;
+  context: 'CCTR' | 'PCTR' | 'MA';
+  type: 'DISTRIBUTION' | 'OVERHEAD';
+  iterative: boolean; segments: AllocSegment[];
+}
+
+// TDD
+interface TDDRule {
+  id: string; name: string;
+  sender: { segments: ObjSelector; accounts: AccountSelector };
+  distributeChars: CharKey[];                        // 細分化する特性
+  reference: { accounts: AccountSelector; source: 'CURRENT_PERIOD' };
+}
+
+// ---------- 決済 ----------
+interface SettlementProfile { id: string; allowed: ObjType[]; structure: { accounts: AccountSelector; settleAccount: string | 'KEEP' }[] }
+interface DistributionRule {
+  receiver: ObjRef; basis: 'PCT' | 'EQUIV' | 'AMOUNT'; value: number;
+  settlementType: 'PER' | 'FUL'; validFrom: number; validTo?: number; // 期間番号
+}
+interface SettlementRule { id: string; sender: ObjRef; rules: DistributionRule[] }
+
+// ---------- 活動配分・間接費 ----------
+interface ActivityAllocation { id: string; senderCctr: string; activityType: string; receiver: ObjRef; quantity: number }
+interface CostingSheet { id: string; rows: { base: AccountSelector; ratePct: number; creditCctr: string; overheadAccount: string }[]; targets: ObjRef[] }
+
+// ---------- 締めステップ ----------
+type StepKind = 'OVERHEAD_CALC' | 'ACTIVITY_ALLOC' | 'ALLOC_CYCLE' | 'ACTUAL_RATE_REVAL' | 'SETTLEMENT' | 'TDD' | 'MANUAL_REPOST';
+interface ClosingStep { id: string; name: string; kind: StepKind; itemIds: string[]; enabled: boolean }
+
+// ---------- シナリオ・プロジェクト ----------
+interface Scenario {
+  id: string; name: string; memo?: string;
+  cycles: AllocationCycle[]; tddRules: TDDRule[]; settlementRules: SettlementRule[];
+  activityAllocs: ActivityAllocation[]; costingSheets: CostingSheet[];
+  steps: ClosingStep[];
+}
+interface Project {
+  schemaVersion: 1;
+  master: { controllingArea?: string; companyCode?: string;   // F1-01
+            period: number; currency: 'JPY'; accounts: GLAccount[]; profitCenters: ProfitCenter[];
+            costCenters: CostCenter[]; wbs: WBSElement[]; activityTypes: ActivityType[];
+            skfs: StatKeyFigure[]; segments: ProfitabilitySegment[]; settlementProfiles: SettlementProfile[];
+            groups: { id: string; type: ObjType; name: string; members: string[] }[] };
+  primaryPostings: PrimaryPosting[];
+  scenarios: Scenario[];
+}
+
+// ---------- 結果（保存しない） ----------
+interface JournalLine {
+  id: string; stepId: string; docId: string; account: string; obj: ObjRef;
+  profitCenter: string;        // 導出結果
+  partner?: ObjRef;            // 相手対象（送信者／受信者）
+  amount: Yen;
+  role: 'PRIMARY' | 'SENDER' | 'RECEIVER'; // 一次仕訳／送信側（貸方）／受信側（借方）
+  origin: { ruleId: string; rowId?: string; sourceLineIds: string[];
+            sourceFactors?: number[] };   // 来歴の倍率。反復配賦だけで使う
+}
+```
+
+保存形式は、Project型をそのままJSONにしたものとする。schemaVersionで移行を管理する。
+
+## 5. 計算エンジン
+
+エンジンは「仕訳の台帳」を状態として持つ純粋な関数とする。ステップごとに、その時点の残高を読み、新しい仕訳を足して返す。順序を入れ替えた結果は、ステップ列を変えて再実行するだけで得られる。
+
+```ts
+type Ledger = readonly JournalLine[];
+type StepResult = { lines: JournalLine[]; issues: Issue[] };
+function runStep(ledger: Ledger, step: ClosingStep, ctx: { master: Master; scenario: Scenario }): StepResult;
+function runAll(project: Project, scenarioId: string): { ledger: Ledger; snapshots: Map<string /*stepId*/, BalanceIndex>; issues: Issue[] };
+// BalanceIndex: (objKey, account) → 残高。ステップ末ごとに持ち、巻き戻しと差分表示に使う
+```
+
+### 5.1 既定の締め順序
+
+1. 直接活動配分（期中の工数を、計画レートで流す）
+2. 間接費計算（WBSに間接費を載せ、原価センタを貸方にする）
+3. 決済①：間接費プロジェクトから原価センタへ
+4. 原価センタ間の配布
+5. 原価センタ間の配賦（反復サイクルを含む）
+6. 実績原価レートの計算と再評価
+7. 決済②：WBSから収益性セグメントへ
+8. マージン分析への配賦・配布（原価センタから収益性セグメントへ）
+9. TDD（粗いセグメントから細かいセグメントへ）
+
+この順には2つの依存がある。間接費計算は原価センタを貸方にするため、配賦より先に回す。後に回すと、配賦済みの原価センタがマイナスになる。決済は受信者の種類で2つに分ける。原価センタへの決済は配賦の前、セグメントへの決済は後に回す。ワークショップでは、この2点を入れ替えて違いを見せるのが主な使い方になる。
+
+### 5.2 手法ごとの計算
+
+| 手法 | 送信額 | 受信側の重み | 生成する仕訳 |
+| --- | --- | --- | --- |
+| 配布 | 送信対象×送信勘定ごとの残高×送信割合 | 配分基準による | 送信側を元の勘定で貸方、受信側を同じ勘定で借方 |
+| 配賦 | 同上（勘定を合算） | 配分基準による | 送信側と受信側を、ともに配賦勘定（42）で計上 |
+| マージン分析への配賦・配布 | 同上 | 配分基準による（受信はセグメント） | 配賦か配布かに応じて上と同じ |
+| TDD | 送信セグメント×勘定ごとの残高 | 参照勘定でのセグメント別残高 | 粗いセグメントを貸方、細かいセグメントを借方。勘定は同じ |
+| 直接活動配分 | 数量×計画レート | 指定した受信者だけ | 送信原価センタと受信者を、活動配分勘定（43）で計上 |
+| 実績レート再評価 | （実績レート−計画レート）×数量 | 活動配分の実績数量 | 同上 |
+| 間接費計算 | 対象のベース勘定残高×率 | 対象そのもの | 対象を借方、貸方原価センタを貸方。勘定は間接費勘定（41） |
+| 決済 | 送信WBS×勘定ごとの残高 | 分配規則（%、等価係数、金額） | 決済構造で決まる勘定（21か元の勘定）で、送信を貸方、受信を借方 |
+
+**細かい決めごと**
+
+- 配分基準「VARIABLE」は、そのステップ開始時点の受信側残高を使う。asOfStepを指定したときは、そのステップ末の残高を使う
+- 決済の分配規則は、金額指定を先に引き、残りに%を当て、さらに残りを等価係数で分ける。等価係数がなく%の合計が100未満なら、残りは送信WBSに残す
+- WBSから別のWBSへの決済は、受信者を後にする順（トポロジカル順）で処理する。循環していればエラーとする
+- 1期間だけを扱うため、決済タイプのPERとFULは同じ結果になる。型には持たせておく
+- 実績原価レートは、そのステップ開始時点の原価センタの残高から活動配分・再評価の貸方を除いた額（原価プール）÷活動の実績数量とする。再評価では、原価プールとこれまでの貸方の差額を、実績数量の比で受信者に配る
+- 顧客プロジェクトのWBSの残高は、属性として導出されたセグメントに含めてセグメント別に見る
+
+### 5.3 サイクル内の順序と反復
+
+非反復サイクルでは、セグメントを定義順に処理する。前のセグメントの受信額は、後のセグメントの送信額に含める（段階配賦）。処理済みの送信者に戻った額は、そのまま残す（V-12の警告）。
+
+反復サイクルでは、送信者同士のやり取りを連立方程式として解く。送信者 i の総額は、自身の残高と、他の送信者から受ける額の和になる。
+
+```latex
+x_i = b_i + \sum_{j \in S} s_j \, w_{ji} \, x_j
+```
+
+ここで b は自身の残高、s は送信割合、w は j から i への重みである。送信者が200件以下ならガウスの消去法で直接解く。それより多ければ、差が1円未満になるまで繰り返し計算する（上限100回）。解いた総額を、最後に一度だけ受信側へ配る。
+
+### 5.4 端数処理
+
+按分は、実数で計算してから円に丸める。差額は最大剰余法で配り、送信額と受信額の合計を必ず一致させる。同順位は、受信対象のIDの昇順で決める。結果を毎回同じにするためである。
+
+### 5.5 検証規則
+
+| ID | 重さ | 条件 |
+| --- | --- | --- |
+| V-01 | エラー | 配布の送信勘定に二次原価が含まれる |
+| V-02 | エラー | 配賦タイプで、配賦勘定が未設定か、カテゴリ42でない |
+| V-03 | エラー | 統計WBSが、送信者か受信者になっている |
+| V-04 | エラー | 決済の受信者が、決済プロファイルで許されていない |
+| V-05 | エラー | 分配規則の%合計が100を超える |
+| V-06 | 警告 | 分配規則の%合計が100未満で、残高が残る |
+| V-07 | エラー | WBS間の決済が循環している |
+| V-08 | 警告 | 同じWBSを2つのステップで決済している（実機では再決済に取消が要る） |
+| V-09 | エラー | 属性として導出されたセグメントを、TDDの送信者にしている |
+| V-10 | エラー | TDDの参照データが0円で、按分できない |
+| V-11 | 警告 | 前のステップで流し終えた対象に、後のステップで額が戻る |
+| V-12 | 警告 | 非反復サイクルで、処理済みの送信者に額が戻る |
+| V-13 | エラー | 配分基準の合計が0（受信側の統計KFがすべて0など） |
+| V-14 | 警告 | 顧客プロジェクトのWBSに決済規則がある |
+| V-15 | 警告 | 間接費計算の貸方原価センタが、それより前に配賦済みでマイナスになる |
+| V-16 | 情報 | 締め後に残高が残る原価センタ・WBS（未配分）。顧客プロジェクトのWBSは除く |
+| V-17 | エラー | 一次仕訳の合計と、最終的な全対象の残高合計が一致しない（エンジンの不具合） |
+
+### 5.6 来歴の計算
+
+各仕訳は、送信側のどの仕訳群から生まれたかを持つ。ある残高の来歴は、この関係を逆に辿って求める。送信時点の送信側残高の構成比で按分し、一次仕訳まで遡る。計算はクリックされたときだけ行い、結果は画面を閉じるまで保持する。
+
+## 6. 画面設計
+
+中心は、締めステップ、フロー図、ルールと検証、残高表を1画面に並べたメイン画面である。ステップを選ぶと、フロー図と残高表がその時点の状態に切り替わる。ワークショップの大半は、この画面で済ませる。
+
+&#91;embedded content: メイン画面のレイアウト · 5領域\]
+
+フロー図は、オブジェクトの種類ごとに列を分けて描く。値は左から右へ流れるので、逆向きの線（原価センタへ戻る決済など）が目で見て分かる。
+
+**画面一覧**
+
+| 画面 | 目的 | 主な操作 |
+| --- | --- | --- |
+| メイン（締め検討） | 組み替えと結果の確認 | ステップの並べ替え、実行、ノード間をドラッグしてルールを作る |
+| マスタ | 組織と科目の準備 | 表形式で編集、CSV取込、サンプル生成 |
+| 期中実績 | 配る元の金額の準備 | 一次仕訳の入力、CSV取込、対象別の合計表示 |
+| シナリオ比較 | 案の差を示す | 2案を選ぶ、PC別・セグメント別・勘定別の差を表示、サンキー図を並べる |
+| 出力 | 設定検討への受け渡し | サイクル一覧と決済規則一覧のExcel、仕訳CSV、プロジェクトJSON |
+
+**ノード間ドラッグで選べる手法**
+
+送信側から受信側へ線を引くと、組み合わせに応じた手法だけを候補に出す。
+
+| 送信 → 受信 | 原価センタ | WBS | 収益性セグメント |
+| --- | --- | --- | --- |
+| 原価センタ | 配布、配賦、直接活動配分 | 配布、配賦、直接活動配分、間接費計算（WBS側が借方） | マージン分析への配賦・配布 |
+| WBS | 決済 | 決済 | 決済 |
+| 収益性セグメント | （なし） | （なし） | TDD |
+
+利益センタから利益センタへの配布・配賦は、フロー図の別タブ（利益センタ表示）で扱う。
+
+**表示の決めごと**
+
+- 手法ごとに線の色を固定し、凡例を常に出す。オフにしたステップの線は破線にする
+- ノードには、選んだステップ時点の残高を小さく出す。残高が残るノードは枠を強調する（V-16）
+- 比較画面では、差が出たノードと線だけを強調し、他は薄くする
+- プロジェクタ向けに、文字を大きくする「発表モード」を持つ
+
+## 7. 技術選定と構成
+
+TypeScriptとReactで作る、サーバを持たない静的なWebアプリとする。決め手は、ノードを編集する部品（React Flow）と、サンキー図などの描画部品が成熟していることだ。Flutter Webでも作れるが、ノード編集とサンキー図は自作になる部分が大きい。
+
+| 用途 | 採用 | 理由 |
+| --- | --- | --- |
+| 言語・ビルド | TypeScript、Vite、pnpm | 型でドメインを守る。起動が速い |
+| UI | React 19、Tailwind CSS、shadcn/ui | 表と入力フォームが多い画面を素早く組める |
+| フロー図 | React Flow（@xyflow/react）＋elkjs | ノードの編集とドラッグ接続を標準で持つ。elkjsで列ごとに自動配置する |
+| サンキー図 | d3-sankey | 金額の流れを、ステップで絞って描ける |
+| 表 | TanStack Table | 勘定×ステップの残高表、仕訳一覧、差分表 |
+| 状態管理 | Zustand＋Immer、zundo | 編集の取り消し・やり直しを持たせる |
+| 計算の実行 | Web Worker＋Comlink | 再計算中も画面を止めない |
+| 型の検証 | Zod | JSONの読み込みとCSV取り込みを検査する |
+| 保存 | IndexedDB（Dexie）、JSONファイル | 自動保存と、ファイルでの受け渡し |
+| Excel出力 | ExcelJS | サイクル一覧と決済規則一覧を書き出す |
+| テスト | Vitest、Playwright | エンジンは単体テスト、画面は主要な流れだけE2E |
+
+**構成**
+
+エンジンをUIから切り離し、別パッケージにする。エンジンはReactにもブラウザにも依存しない。そのため、Node上のテストでそのまま回せる。
+
+```text
+sap-alloc-sim/
+├─ packages/
+│  └─ engine/                 # 純粋なTS。UI非依存
+│     ├─ src/
+│     │  ├─ model/            # 4章の型定義、Zodスキーマ
+│     │  ├─ ledger/           # 残高索引、利益センタ導出、端数処理
+│     │  ├─ methods/          # distribution.ts, overhead.ts, tdd.ts,
+│     │  │                    # activity.ts, revaluation.ts, overheadCalc.ts, settlement.ts
+│     │  ├─ iterative/        # 反復サイクルの連立方程式
+│     │  ├─ validate/         # V-01〜V-17
+│     │  ├─ lineage/          # 来歴の逆追跡
+│     │  ├─ compare/          # シナリオ差分
+│     │  ├─ seed/             # YCOAもどき、サンプル会社、標準テンプレート（engineのテストも使う）
+│     │  ├─ run.ts            # runStep / runAll
+│     │  └─ cli.ts            # 画面なしで結果を確かめるCLI（pnpm sim）
+│     └─ test/                # 8章のテストケース
+├─ apps/
+│  └─ web/
+│     ├─ src/
+│     │  ├─ store/            # Zustand。プロジェクト、選択中のシナリオとステップ
+│     │  ├─ worker/           # エンジンをWorkerで動かす
+│     │  ├─ features/
+│     │  │  ├─ flow/          # フロー図（React Flow）
+│     │  │  ├─ steps/         # 締めステップ
+│     │  │  ├─ rules/         # サイクル、決済規則などの編集フォーム
+│     │  │  ├─ balances/      # 残高表、仕訳、来歴
+│     │  │  ├─ compare/       # シナリオ比較、サンキー図
+│     │  │  ├─ master/        # マスタ、期中実績
+│     │  │  └─ io/            # JSON、CSV、Excel
+│     └─ e2e/
+└─ docs/
+   ├─ requirements.md         # この文書
+   └─ decisions.md            # Decision Log（決定・暫定解釈・未決事項）
+```
+
+**処理の流れ**：画面で編集すると、ストアがシナリオを更新する。ストアは300ミリ秒待ってからWorkerに再計算を頼む。Workerは台帳、ステップ別残高、検証結果を返す。画面はそれを表示するだけで、計算はしない。
+
+## 8. サンプル、テスト、進め方
+
+### 8.1 サンプル会社「サンプル商事」
+
+シードデータとして同梱し、F2-03で生成する。テストもこの会社を使う。
+
+| 種類 | 内容 |
+| --- | --- |
+| 利益センタ | PC10 本社、PC20 製品事業、PC30 サービス事業 |
+| 原価センタ | 1000 管理部（PC10）、1100 IT部（PC10）、2000 製造部（PC20）、2100 製品営業部（PC20）、3000 サービス部（PC30） |
+| WBS | P-100 社内システム刷新（間接費プロジェクト、PC10）、C-200 顧客A保守案件（顧客プロジェクト、PC30、属性セグメント＝顧客A×サービス） |
+| 統計KF | 人数：1000＝5、1100＝4、2000＝20、2100＝8、3000＝12 |
+| 活動タイプ | ENG 技術工数（3000、計画レート 8,000円/時） |
+| セグメント特性 | 顧客（A・B・C）、製品グループ（PG1・SVC）、利益センタ |
+| 一次仕訳 | 1000：給与 1,000,000円。1100：給与 4,000,000円、減価償却 1,000,000円。P-100：外注費 3,000,000円。C-200：外注費 1,500,000円。3000：給与 2,700,000円。売上（PG1）：顧客A 6,000,000円、B 3,000,000円、C 1,000,000円。全社×PG1の運賃 300,000円 |
+
+### 8.2 テストケース（期待値つき）
+
+エンジンの単体テストは、まずこの13件を通す。テスト名にはIDを入れる。
+
+| ID | 内容 | 期待結果 |
+| --- | --- | --- |
+| T-01 | 1000の給与1,000,000円を、2000と2100へ60:40で配布 | 2000 +600,000、2100 +400,000（勘定61000000のまま）。PC10 −1,000,000、PC20 +1,000,000 |
+| T-02 | T-01を配賦で実行 | 61000000は1000に残り、94100000で1000 −1,000,000、受信側 +600,000／+400,000 |
+| T-03 | 1,000,000円を3者に均等配布 | 333,334／333,333／333,333。端数1円はIDが最小の受信者へ |
+| T-04 | 反復：A 100,000円、B 50,000円。Aは50%をB、50%をXへ。Bは20%をA、80%をYへ | X 61,111円、Y 88,889円、A・Bの残高0 |
+| T-05 | T-04を非反復で、A→Bの順に実行 | X 50,000円、Y 80,000円、Aに20,000円残る（V-12） |
+| T-06 | P-100を1100へ100%決済し、1100を人数で2000・2100・3000へ配賦。順序2通り | 決済が先：4,000,000／1,600,000／2,400,000。配賦が先：2,500,000／1,000,000／1,500,000、1100に3,000,000円残る（V-16） |
+| T-07 | C-200の外注費1,500,000円に10%の間接費、貸方1000。1000を配賦し終えた後に実行 | C-200 +150,000（94200000）、1000が−150,000円（V-15） |
+| T-08 | 全社×PG1の運賃300,000円を、PG1の売上を参照して顧客別にTDD | 顧客A 180,000、B 90,000、C 30,000 |
+| T-09 | C-200の属性セグメントをTDDの送信者に指定 | V-09エラー。仕訳を作らない |
+| T-10 | サンプル全体を既定順序で実行 | 全対象の残高合計が、一次仕訳合計と一致（V-17が出ない） |
+| T-11 | 3000からC-200へ300時間の活動配分、続けて実績レートで再評価 | 配分2,400,000円（94300000）。実績レート9,000円で、再評価 +300,000円 |
+| T-12 | P-100の分配規則を70%だけにして決済 | 2,100,000円を決済、900,000円がP-100に残る（V-06） |
+| T-13 | P-100→P-101→P-100の決済規則 | V-07エラー |
+
+### 8.3 開発の段階
+
+1. M0 土台：リポジトリ、4章の型とZodスキーマ、YCOAもどきとサンプル会社のシード
+2. M1 エンジン前半：台帳、利益センタ導出、端数処理、配布、配賦、決済、TDD。T-01〜T-09とT-12・T-13を通す
+3. M2 エンジン後半：活動配分、再評価、間接費計算、反復サイクル、検証規則、来歴。T-10・T-11を通す
+4. M3 画面の土台：マスタと実績の表編集、締めステップのリスト、1ステップ実行、残高表
+5. M4 フロー図：React Flowでの描画、ドラッグでのルール作成、ルールの編集フォーム、検証の表示
+6. M5 比較と出力：シナリオ比較、サンキー図、Excel出力、発表モード
+7. M6 仕上げ：E2Eテスト、性能確認（オブジェクト500件・一次仕訳1万行で1秒以内）
+
+M2を終えた時点で、画面がなくてもCLIから結果を確かめられる。ここで一度、数字を見て計算ルールを確定させる。
+
+### 8.4 Claude Codeへの引き継ぎ
+
+この文書をMarkdownで書き出し、docs/requirements.mdとして置く。リポジトリ直下のCLAUDE.mdには、次の内容を書く（その後の追記を含め、実際の CLAUDE.md を正とする）。
+
+```markdown
+# CLAUDE.md
+- 仕様は docs/requirements.md。2章（Public Cloudの制約）と5章（計算規則）を変えるときは、実装前に必ず確認を求める
+- 計算は packages/engine にだけ書く。apps/web で金額を計算しない
+- 金額は円の整数。按分は最大剰余法、同順位はIDの昇順
+- engine はテスト先行。テスト名に要件ID（F-xx）、検証ID（V-xx）、テストID（T-xx）を入れる
+- 画面の文言は apps/web/src/i18n/ja.ts に集める
+- 段階は 8.3 の M0→M6 の順。各段階の終わりに pnpm test を全件通す
+```
+
+**未決事項**（ワークショップで使い始める前に決める）
+
+- 2章の要確認3点。実機のテナントで確かめる
+- 計画データ（予算配賦）を扱うか。扱うなら、期間と版の軸を型に足す
+- 利益センタ間の配布・配賦を、MVPに入れるか
+
+**出典**
+
+- [SAP Learning：配布と配賦の違い](https://learning.sap.com/learning-journeys/evaluating-overhead-cost-accounting-in-sap-s-4hana/differentiating-between-distribution-and-overhead-allocation_d3bcfcf4-62f7-40b7-a05c-feaf4ff542c6)
+- [SAP Community：Top-Down Distribution in SAP S/4HANA](https://blogs.sap.com/2021/11/09/top-down-distribution-in-sap-s-4hana/)
+- [SAP KBA 2893403：期末処理アプリのジョブテンプレート化](https://userapps.support.sap.com/sap/support/knowledge/en/2893403)
+- [SAP KBA 3071059：決済規則変更後の再決済](https://userapps.support.sap.com/sap/support/knowledge/en/3071059)
+- [SAP KBA 3777535：実績原価レート計算](https://userapps.support.sap.com/sap/support/knowledge/en/3777535)
+- [SAP Community：Public Cloudの顧客プロジェクト会計](https://blogs.sap.com/2018/06/26/financial-accounting-for-customer-projects-in-sap-s4hana-cloud-part-1-real-time-insights-in-project-based-service-scenario)

@@ -1,0 +1,22 @@
+// 公開 API。UI（apps/web）と CLI はここだけを使う。
+export * from './model/schema.ts';
+export * from './model/types.ts';
+export * from './model/keys.ts';
+export { BalanceIndex, type ReadonlyBalanceIndex } from './ledger/balance.ts';
+export { MasterIndex, segmentLabel } from './ledger/masterIndex.ts';
+export { allocate, normalizeWeights, roundYen } from './ledger/rounding.ts';
+export { matchAccount, selectObjects } from './ledger/select.ts';
+export { runAll, runStep, type RunResult, type StepResult } from './run.ts';
+export { validateStatic } from './validate/static.ts';
+export { ISSUE_DEFS, fmtYen, type IssueCode } from './validate/issues.ts';
+export { LineageTracer, UNATTRIBUTED, type LineageVector } from './lineage/lineage.ts';
+export * from './report/totals.ts';
+export * from './compare/compare.ts';
+export { YCOA_MOCK_ACCOUNTS, ACCOUNT_RANGES } from './seed/ycoa.ts';
+export { DEFAULT_STEP_TEMPLATE, stepsFromTemplate } from './seed/template.ts';
+export { sampleProject, SEG as SAMPLE_SEGMENTS, SAMPLE_PERIOD } from './seed/sampleCompany.ts';
+export * from './session.ts';
+export * from './io/project.ts';
+export { parseCsv, toCsv, postingsToCsv, postingsFromCsv, POSTING_CSV_HEADER, type CsvError } from './io/csv.ts';
+export { findReferences, renameReference, type RefKind } from './edit/refs.ts';
+export * from './edit/codec.ts';
