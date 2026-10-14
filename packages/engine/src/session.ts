@@ -11,7 +11,7 @@ import { DISPLAY_LIMITS, topByAmount } from './graph/limits.ts';
 import { journalToCsv } from './io/csv.ts';
 import { describeRules, structuralEdges, type Method, type RuleInfo, type RuleKind } from './graph/rules.ts';
 import type { ReadonlyBalanceIndex } from './ledger/balance.ts';
-import { MasterIndex, segmentLabel } from './ledger/masterIndex.ts';
+import { MasterIndex } from './ledger/masterIndex.ts';
 import { LineageTracer, UNATTRIBUTED } from './lineage/lineage.ts';
 import { compareId, compareObj, objKey, parseObjKey } from './model/keys.ts';
 import { PRIMARY_STEP_ID, TIER_ORDER, type Issue, type ObjTier, type ObjType, type Project, type Severity, type StepKind, type Yen } from './model/types.ts';
@@ -309,7 +309,7 @@ export class SimSession {
       .map(([key, amount]) => ({ key, label: key ? `${key} ${mi.profitCenters.get(key)?.name ?? ''}`.trim() : '', amount }));
     const bySegment = [...totalsBySegment(bal, mi)]
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([key, amount]) => ({ key, label: segmentLabel(key), amount }));
+      .map(([key, amount]) => ({ key, label: mi.segmentName(key), amount }));
 
     const lines: LineRow[] = this.result.ledger
       .filter((l) => l.stepId === stepId)
@@ -495,7 +495,7 @@ export class SimSession {
       a: { id: this.scenarioId, name: this.scenario.name },
       b: { id: other.scenarioId, name: other.scenario.name },
       byProfitCenter: withLabel(c.byProfitCenter, pcName),
-      bySegment: withLabel(c.bySegment, segmentLabel),
+      bySegment: withLabel(c.bySegment, (k) => this.mi.segmentName(k)),
       byAccount: withLabel(c.byAccount, (k) => `${k} ${this.accountName(k)}`.trim()),
       byObject: withLabel(c.byObject, (k) => this.mi.label(parseObjKey(k))),
       steps,

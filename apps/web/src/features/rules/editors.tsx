@@ -33,7 +33,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 export const boxed = 'border-border bg-background';
 
 const objectLabel = (p: Project, type: ObjType, id: string): string => {
-  if (type === 'PSEG') return segmentLabel(id);
+  if (type === 'PSEG') return p.master.segments.find((s) => s.id === id)?.name || segmentLabel(id);
   const o = opts.objects(p, type).find((x) => x.value === id);
   return o?.label ?? id;
 };

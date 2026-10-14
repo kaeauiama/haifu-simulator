@@ -2,22 +2,24 @@
  * 画面なしで結果を確かめる CLI（8.3「M2を終えた時点で、CLIから結果を確かめられる」）。
  *
  *   pnpm sim                                サンプル商事の全シナリオを実行して要約を出す
+ *   pnpm sim -- --sample railway            みどり川電鉄（鉄道のサンプル）を使う
  *   pnpm sim -- --scenario S-LATE           シナリオを選ぶ
  *   pnpm sim -- --file project.json         プロジェクトJSONを読む（Zodで検査）
  *   pnpm sim -- --journal                   ステップごとの流れ（送信→受信）を出す
  *   pnpm sim -- --compare S-DEFAULT S-LATE  2案の差を出す
  *   pnpm sim -- --trace "CCTR:2000"         最終残高の来歴を出す
- *   pnpm sim -- --dump-sample out.json      サンプル商事をJSONに書き出す
+ *   pnpm sim -- --dump-sample out.json      サンプル（--sample で選ぶ）をJSONに書き出す
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { compareRuns } from './compare/compare.ts';
-import { MasterIndex, segmentLabel } from './ledger/masterIndex.ts';
+import { MasterIndex } from './ledger/masterIndex.ts';
 import { LineageTracer } from './lineage/lineage.ts';
 import { compareObj, parseObjKey } from './model/keys.ts';
 import { ProjectSchema } from './model/schema.ts';
 import type { Issue, Project } from './model/types.ts';
 import { flows, totalsByObject, totalsByProfitCenter, totalsBySegment } from './report/totals.ts';
 import { runAll, type RunResult } from './run.ts';
+import { railwayProject } from './seed/railway.ts';
 import { sampleProject } from './seed/sampleCompany.ts';
 import { fmtYen } from './validate/issues.ts';
 
@@ -43,9 +45,12 @@ const opt = (name: string): string | undefined => {
 };
 const flag = (name: string) => args.includes(name);
 
+/** 同梱のサンプル。--sample railway でみどり川電鉄、ほかはサンプル商事 */
+const builtInSample = (): Project => (opt('--sample') === 'railway' ? railwayProject() : sampleProject());
+
 function loadProject(): Project {
   const file = opt('--file');
-  if (!file) return sampleProject();
+  if (!file) return builtInSample();
   const parsed = ProjectSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
   if (!parsed.success) {
     console.error(`プロジェクトJSONの形式が正しくありません：${file}`);
@@ -96,7 +101,7 @@ function printRun(p: Project, r: RunResult, mi: MasterIndex): void {
 
   console.log(h1('最終残高：セグメント別（顧客プロジェクトは属性セグメントに含める）'));
   const segs = [...totalsBySegment(final, mi)].sort(([a], [b]) => (a < b ? -1 : 1));
-  console.log(table(['セグメント', '残高'], segs.map(([k, v]) => [segmentLabel(k), fmtYen(v)]), [false, true]));
+  console.log(table(['セグメント', '残高'], segs.map(([k, v]) => [mi.segmentName(k), fmtYen(v)]), [false, true]));
 
   const primary = p.primaryPostings.reduce((s, x) => s + x.amount, 0);
   console.log(`\nゼロサム検査：一次仕訳合計 ${fmtYen(primary)} ／ 最終残高合計 ${fmtYen(final.grandTotal())}`);
@@ -128,8 +133,8 @@ function printRun(p: Project, r: RunResult, mi: MasterIndex): void {
 function main(): void {
   const out = opt('--dump-sample');
   if (out) {
-    writeFileSync(out, `${JSON.stringify(sampleProject(), null, 2)}\n`, 'utf8');
-    console.log(`サンプル商事を書き出しました：${out}`);
+    writeFileSync(out, `${JSON.stringify(builtInSample(), null, 2)}\n`, 'utf8');
+    console.log(`サンプルを書き出しました：${out}`);
     return;
   }
   const p = loadProject();
@@ -146,7 +151,7 @@ function main(): void {
       console.log(table(['キー', a, b, '差（B−A）'], rows.map((r) => [label(r.key), fmtYen(r.a), fmtYen(r.b), fmtYen(r.diff)]), [false, true, true, true]));
     };
     show('利益センタ別', c.byProfitCenter, (k) => k || '（未割当）');
-    show('セグメント別', c.bySegment, segmentLabel);
+    show('セグメント別', c.bySegment, (k) => mi.segmentName(k));
     show('勘定別（マージン分析上）', c.byAccount, (k) => `${k} ${mi.accounts.get(k)?.name ?? ''}`);
     show('対象別（差があるもの）', c.byObject.filter((r) => r.diff !== 0), (k) => mi.label(parseObjKey(k)));
     console.log(h1('結果が変わったステップ'));

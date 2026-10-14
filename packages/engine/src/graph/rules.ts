@@ -68,13 +68,13 @@ export function stepsOfRule(s: Scenario, kind: RuleKind, id: string): string[] {
   return s.steps.filter((st) => st.kind === STEP_KIND_OF[kind] && st.itemIds.includes(id)).map((st) => st.id);
 }
 
-/** シナリオのルール一覧（表示名つき） */
-export function describeRules(s: Scenario): RuleInfo[] {
+/** シナリオのルール一覧（表示名つき）。nameOf で対象の書き方を変えられる（既定は識別子。セグメントは名前にしたいとき） */
+export function describeRules(s: Scenario, nameOf: (o: ObjRef) => string = (o) => o.id): RuleInfo[] {
   const info = (kind: RuleKind, id: string, name: string, method: Method): RuleInfo => ({ kind, id, name, method, stepIds: stepsOfRule(s, kind, id) });
   return [
-    ...s.activityAllocs.map((a) => info('ACTIVITY', a.id, `${a.senderCctr} → ${a.receiver.id}（${a.activityType} ${a.quantity}）`, 'ACTIVITY')),
-    ...s.costingSheets.map((c) => info('COSTING', c.id, `${[...new Set(c.rows.map((r) => r.creditCctr))].join('・')} → ${c.targets.map((t) => t.id).join('・')}`, 'OVERHEAD_CALC')),
-    ...s.settlementRules.map((r) => info('SETTLEMENT', r.id, `${r.sender.id} → ${r.rules.map((d) => d.receiver.id).join('・')}`, 'SETTLEMENT')),
+    ...s.activityAllocs.map((a) => info('ACTIVITY', a.id, `${a.senderCctr} → ${nameOf(a.receiver)}（${a.activityType} ${a.quantity}）`, 'ACTIVITY')),
+    ...s.costingSheets.map((c) => info('COSTING', c.id, `${[...new Set(c.rows.map((r) => r.creditCctr))].join('・')} → ${c.targets.map(nameOf).join('・')}`, 'OVERHEAD_CALC')),
+    ...s.settlementRules.map((r) => info('SETTLEMENT', r.id, `${nameOf(r.sender)} → ${r.rules.map((d) => nameOf(d.receiver)).join('・')}`, 'SETTLEMENT')),
     ...s.cycles.map((c) => info('CYCLE', c.id, c.name, cycleMethod(c))),
     ...s.tddRules.map((r) => info('TDD', r.id, r.name, 'TDD')),
   ];

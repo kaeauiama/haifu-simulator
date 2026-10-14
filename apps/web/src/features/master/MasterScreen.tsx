@@ -9,6 +9,7 @@ import {
   parseStructure,
   renameReference,
   segmentKey,
+  segmentLabel,
   type ActivityType,
   type CharKey,
   type CostCenter,
@@ -455,6 +456,23 @@ function Segments() {
           ),
       }),
     ),
+    {
+      id: 'name',
+      header: C.name,
+      cell: (s, i) => (
+        <TextCell
+          value={s.name ?? ''}
+          placeholder={segmentLabel(s.id)}
+          commit={(v) =>
+            edit((p) => {
+              const seg = p.master.segments[i]!;
+              if (v) seg.name = v;
+              else delete seg.name;
+            })
+          }
+        />
+      ),
+    },
     {
       id: 'attributed',
       header: C.attributed,

@@ -1,7 +1,8 @@
 /**
  * ルールの一覧。種類ごとに並べ、選ぶとフロー図で強調し、編集フォームを開く。
  */
-import { RULE_KINDS, createBlankRule, describeRules, type Issue, type RuleKind } from '@alloc-sim/engine';
+import { RULE_KINDS, createBlankRule, describeRules, segmentLabel, type Issue, type RuleKind } from '@alloc-sim/engine';
+import { useMemo } from 'react';
 import { cn } from 'cn';
 import { Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +21,11 @@ export function RulesPanel() {
   const issues = summary?.issues ?? NO_ISSUES;
   const selectedRule = useUiStore((s) => s.selectedRule);
   const setUi = useUiStore((s) => s.set);
-  const rules = describeRules(scenario);
+  const segments = useProjectStore((s) => s.project.master.segments);
+  const rules = useMemo(() => {
+    const segName = new Map(segments.map((x) => [x.id, x.name || segmentLabel(x.id)]));
+    return describeRules(scenario, (o) => (o.type === 'PSEG' ? (segName.get(o.id) ?? segmentLabel(o.id)) : o.id));
+  }, [scenario, segments]);
   const stepName = (id: string) => {
     const i = scenario.steps.findIndex((s) => s.id === id);
     return `${i + 1}. ${scenario.steps[i]!.name}`;

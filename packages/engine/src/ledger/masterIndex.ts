@@ -131,10 +131,15 @@ export class MasterIndex {
       case 'PCTR':
         return this.profitCenters.get(obj.id)?.name ?? '';
       case 'PSEG':
-        return segmentLabel(obj.id);
+        return this.segmentName(obj.id);
       case 'ORD':
         return '';
     }
+  }
+
+  /** セグメントの表示名。マスタに名前があればそれ、なければ特性値をつないだ名前（D-051） */
+  segmentName(id: string): string {
+    return this.segments.get(id)?.name || segmentLabel(id);
   }
 
   /** 画面・メッセージ用の表示名（例：原価センタ 1100 IT部） */

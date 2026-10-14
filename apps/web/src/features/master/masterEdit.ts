@@ -45,7 +45,7 @@ export const opts = {
   profitCenters: (p: Project): Option[] => p.master.profitCenters.map((x) => ({ value: x.id, label: `${x.id} ${x.name}` })),
   costCenters: (p: Project): Option[] => p.master.costCenters.map((x) => ({ value: x.id, label: `${x.id} ${x.name}` })),
   wbs: (p: Project): Option[] => p.master.wbs.map((x) => ({ value: x.id, label: `${x.id} ${x.name}` })),
-  segments: (p: Project): Option[] => p.master.segments.map((x) => ({ value: x.id, label: segmentLabel(x.id) })),
+  segments: (p: Project): Option[] => p.master.segments.map((x) => ({ value: x.id, label: x.name || segmentLabel(x.id) })),
   accounts: (p: Project, categories?: string[]): Option[] =>
     p.master.accounts.filter((a) => !categories || categories.includes(a.category)).map((a) => ({ value: a.id, label: `${a.id} ${a.name}` })),
   groups: (p: Project, type: string): Option[] => p.master.groups.filter((g) => g.type === type).map((g) => ({ value: g.id, label: `${g.id} ${g.name}` })),

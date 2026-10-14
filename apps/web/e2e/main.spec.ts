@@ -149,3 +149,16 @@ test('マスタ：セルを書き換えて Tab を押すと、右のセルへ移
   await expect(row.locator('input').nth(0)).toHaveValue('41000001');
   await expect(row.locator('input').nth(1)).toHaveValue('売上高');
 });
+
+test('入出力：みどり川電鉄（鉄道）を生成すると、駅別の収支が金額の構成に出る', async ({ page }) => {
+  await page.getByRole('button', { name: '入出力' }).click();
+  await page.getByRole('button', { name: 'みどり川電鉄（鉄道）を生成' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'OK' }).click();
+  await page.getByRole('button', { name: '締め検討' }).click();
+  await page.getByRole('button', { name: '金額の構成', exact: true }).click();
+  await page.getByRole('button', { name: '最初にどこで計上されたか', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^中央駅 / })).toContainText('-179,060,678');
+  await expect(page.getByRole('button', { name: /^工業団地駅 / })).toContainText('46,931,016');
+  await page.getByRole('tab', { name: '集計' }).click();
+  await expect(page.getByText('ゼロサム検査：一致')).toBeVisible();
+});

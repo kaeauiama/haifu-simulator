@@ -1,6 +1,7 @@
 /**
  * サンキー図の材料（F7-02）。送信 → 受信の流れを、選んだステップの範囲で集計する。
  * サンキー図は循環を描けないので、相互の流れ（反復配賦など）は差し引きし、残った循環は小さい流れから外す。
+ * 向きは勘定の性質で決める。費用は受信側がプラスなら送信→受信、収益は受信側がマイナス（売上を受け取る）なら送信→受信（D-052）。
  */
 import type { MasterIndex } from '../ledger/masterIndex.ts';
 import { compareShareKey } from '../ledger/rounding.ts';
@@ -42,8 +43,9 @@ export function buildSankey(ledger: Ledger, scenario: Scenario, mi: MasterIndex,
     if (l.role !== 'RECEIVER' || !l.partner || !stepIds.has(l.stepId) || l.amount === 0) continue;
     const m = methodOf.get(l.origin.ruleId);
     if (!m) continue;
-    // マイナスの流れは、向きを逆にして正の流れとして扱う
-    const [from, to] = l.amount > 0 ? [objKey(l.partner), objKey(l.obj)] : [objKey(l.obj), objKey(l.partner)];
+    // 戻し（費用のマイナス、収益のプラス）は、向きを逆にして正の流れとして扱う
+    const forward = mi.category(l.account) === 'REVENUE' ? l.amount < 0 : l.amount > 0;
+    const [from, to] = forward ? [objKey(l.partner), objKey(l.obj)] : [objKey(l.obj), objKey(l.partner)];
     if (from === to) continue;
     const k = `${from}>${to}`;
     const f = flow.get(k) ?? { value: 0, byMethod: new Map<Method, number>() };

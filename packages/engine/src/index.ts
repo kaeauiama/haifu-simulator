@@ -15,6 +15,7 @@ export * from './compare/compare.ts';
 export { YCOA_MOCK_ACCOUNTS, ACCOUNT_RANGES } from './seed/ycoa.ts';
 export { DEFAULT_STEP_TEMPLATE, stepsFromTemplate } from './seed/template.ts';
 export { sampleProject, SEG as SAMPLE_SEGMENTS, SAMPLE_PERIOD } from './seed/sampleCompany.ts';
+export { railwayProject, RAIL_SEG, RAIL_STATIONS, RAILWAY_PERIOD } from './seed/railway.ts';
 export * from './session.ts';
 export * from './io/project.ts';
 export { parseCsv, toCsv, postingsToCsv, postingsFromCsv, journalToCsv, POSTING_CSV_HEADER, type CsvError } from './io/csv.ts';

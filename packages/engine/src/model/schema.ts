@@ -81,6 +81,8 @@ export const SegmentCharsSchema = charsShape(z.string().min(1));
 
 export const ProfitabilitySegmentSchema = z.object({
   id: z.string().min(1),
+  /** 表示名（D-051）。省くと特性値をつないだ名前（例：顧客A×PG1×PC20） */
+  name: z.string().optional(),
   chars: SegmentCharsSchema,
   attributed: z.boolean(),
 });
