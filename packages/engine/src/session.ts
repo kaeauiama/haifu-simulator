@@ -3,7 +3,10 @@
  * 構造化複製できる素のオブジェクトで返す（Web Worker から Comlink で渡す）。
  * 画面は金額を計算しない（CLAUDE.md）。合計・差分・来歴はすべてこのクラスが返す。
  */
+import { compareRuns } from './compare/compare.ts';
 import { buildMethodView, type MethodView, type ViewMethod } from './graph/methodView.ts';
+import { buildSankey, type SankeyData } from './graph/sankey.ts';
+import { journalToCsv } from './io/csv.ts';
 import { describeRules, structuralEdges, type Method, type RuleInfo, type RuleKind } from './graph/rules.ts';
 import type { ReadonlyBalanceIndex } from './ledger/balance.ts';
 import { MasterIndex, segmentLabel } from './ledger/masterIndex.ts';
@@ -139,6 +142,35 @@ export interface FlowGraph {
   stepId: string;
   nodes: FlowNode[];
   edges: FlowEdge[];
+}
+
+export interface CompareRow {
+  key: string;
+  label: string;
+  a: Yen;
+  b: Yen;
+  diff: Yen;
+}
+
+export interface CompareStep {
+  id: string;
+  name: string;
+  /** 1始まりの並び。その案にないステップは null */
+  indexA: number | null;
+  indexB: number | null;
+  /** 両方にあり、そのステップで作った仕訳が違う（F4-04） */
+  changed: boolean;
+}
+
+export interface CompareView {
+  a: { id: string; name: string };
+  b: { id: string; name: string };
+  byProfitCenter: CompareRow[];
+  bySegment: CompareRow[];
+  /** マージン分析上の勘定別（P-22） */
+  byAccount: CompareRow[];
+  byObject: CompareRow[];
+  steps: CompareStep[];
 }
 
 const OBJ_ORDER: ObjType[] = ['PCTR', 'CCTR', 'WBS', 'ORD', 'PSEG'];
@@ -406,6 +438,43 @@ export class SimSession {
       state: fi.stateOf,
       severity: fi.severityOf,
     });
+  }
+
+  /** サンキー図の材料（F7-02）。stepIds を省くと、実行したすべてのステップ */
+  sankey(stepIds?: readonly string[]): SankeyData {
+    const ids = new Set(stepIds ?? this.scenario.steps.filter((s) => s.enabled).map((s) => s.id));
+    return buildSankey(this.result.ledger, this.scenario, this.mi, ids);
+  }
+
+  /** この案（A）と別の案（B）の差（F8-02、F4-04）。同じプロジェクトのシナリオどうしで比べる */
+  compareWith(other: SimSession): CompareView {
+    const c = compareRuns(this.result, other.result, this.mi);
+    const pcName = (k: string) => (k ? `${k} ${this.mi.profitCenters.get(k)?.name ?? ''}`.trim() : '');
+    const withLabel = (rows: typeof c.byObject, label: (k: string) => string): CompareRow[] => rows.map((r) => ({ ...r, label: label(r.key) }));
+    const stepsA = this.scenario.steps;
+    const stepsB = other.scenario.steps;
+    const changed = new Set(c.changedSteps);
+    const steps: CompareStep[] = [
+      ...stepsA.map((st, i) => {
+        const j = stepsB.findIndex((x) => x.id === st.id);
+        return { id: st.id, name: st.name, indexA: i + 1, indexB: j >= 0 ? j + 1 : null, changed: changed.has(st.id) };
+      }),
+      ...stepsB.filter((st) => !stepsA.some((x) => x.id === st.id)).map((st) => ({ id: st.id, name: st.name, indexA: null, indexB: stepsB.indexOf(st) + 1, changed: false })),
+    ];
+    return {
+      a: { id: this.scenarioId, name: this.scenario.name },
+      b: { id: other.scenarioId, name: other.scenario.name },
+      byProfitCenter: withLabel(c.byProfitCenter, pcName),
+      bySegment: withLabel(c.bySegment, segmentLabel),
+      byAccount: withLabel(c.byAccount, (k) => `${k} ${this.accountName(k)}`.trim()),
+      byObject: withLabel(c.byObject, (k) => this.mi.label(parseObjKey(k))),
+      steps,
+    };
+  }
+
+  /** 締めで作った仕訳の CSV（F9-04） */
+  journalCsv(): string {
+    return journalToCsv(this.result.ledger, this.mi, (id) => this.stepName(id));
   }
 
   /** オブジェクトの「勘定×ステップ」の残高表（F7-03） */

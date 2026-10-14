@@ -1,18 +1,16 @@
-import { parseProjectJson, sampleProject, serializeProject } from '@alloc-sim/engine';
 import { cn } from 'cn';
-import { Copy, Download, FolderOpen, Presentation, Redo2, RotateCcw, Trash2, Undo2 } from 'lucide-react';
+import { Copy, Presentation, Redo2, Trash2, Undo2 } from 'lucide-react';
 import { useStore } from 'zustand';
-import { alertDialog, confirmDialog } from '@/components/dialogs';
+import { confirmDialog } from '@/components/dialogs';
 import { Button } from '@/components/ui/button';
 import { ja } from '@/i18n/ja';
-import { downloadText, pickTextFile, stamp } from '@/lib/files';
 import { redo, undo, useProjectStore } from '@/store/project';
 import { useSaveStore } from '@/store/persist';
 import { useRunStore } from '@/store/run';
 import { duplicateScenario } from '@/store/scenarioOps';
 import { useUiStore, type Screen } from '@/store/ui';
 
-const SCREENS: Screen[] = ['main', 'master', 'postings'];
+const SCREENS: Screen[] = ['main', 'master', 'postings', 'compare', 'io'];
 
 export function Header() {
   const screen = useUiStore((s) => s.screen);
@@ -20,7 +18,7 @@ export function Header() {
   const setUi = useUiStore((s) => s.set);
   const project = useProjectStore((s) => s.project);
   const scenarioId = useProjectStore((s) => s.scenarioId);
-  const { selectScenario, edit, replace } = useProjectStore.getState();
+  const { selectScenario, edit } = useProjectStore.getState();
   const canUndo = useStore(useProjectStore.temporal, (s) => s.pastStates.length > 0);
   const canRedo = useStore(useProjectStore.temporal, (s) => s.futureStates.length > 0);
   const savedAt = useSaveStore((s) => s.savedAt);
@@ -51,24 +49,6 @@ export function Header() {
     edit((p) => {
       p.scenarios = p.scenarios.filter((s) => s.id !== scenario.id);
     });
-  };
-
-  const loadJson = async () => {
-    const f = await pickTextFile('.json,application/json');
-    if (!f) return;
-    const r = parseProjectJson(f.text);
-    if (!r.ok) {
-      await alertDialog(ja.header.loadError, r.errors);
-      return;
-    }
-    replace(r.value);
-    setUi({ cursor: null, selectedObj: null, selectedStepId: null });
-  };
-
-  const resetSample = async () => {
-    if (!(await confirmDialog(ja.header.confirmReset))) return;
-    replace(sampleProject());
-    setUi({ cursor: null, selectedObj: null, selectedStepId: null });
   };
 
   return (
@@ -120,20 +100,6 @@ export function Header() {
         </Button>
         <Button size="icon-sm" variant="ghost" title={ja.header.redo} aria-label={ja.header.redo} disabled={!canRedo} onClick={redo}>
           <Redo2 />
-        </Button>
-      </div>
-      <div className="flex items-center gap-1">
-        <Button size="sm" variant="outline" onClick={() => downloadText(`alloc-sim-${stamp()}.json`, serializeProject(project), 'application/json')}>
-          <Download />
-          {ja.header.saveJson}
-        </Button>
-        <Button size="sm" variant="outline" onClick={loadJson}>
-          <FolderOpen />
-          {ja.header.loadJson}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={resetSample}>
-          <RotateCcw />
-          {ja.header.resetSample}
         </Button>
       </div>
       <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">

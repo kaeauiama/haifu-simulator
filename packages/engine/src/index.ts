@@ -17,7 +17,7 @@ export { DEFAULT_STEP_TEMPLATE, stepsFromTemplate } from './seed/template.ts';
 export { sampleProject, SEG as SAMPLE_SEGMENTS, SAMPLE_PERIOD } from './seed/sampleCompany.ts';
 export * from './session.ts';
 export * from './io/project.ts';
-export { parseCsv, toCsv, postingsToCsv, postingsFromCsv, POSTING_CSV_HEADER, type CsvError } from './io/csv.ts';
+export { parseCsv, toCsv, postingsToCsv, postingsFromCsv, journalToCsv, POSTING_CSV_HEADER, type CsvError } from './io/csv.ts';
 export { findReferences, renameReference, type RefKind } from './edit/refs.ts';
 export * from './edit/codec.ts';
 export * from './graph/rules.ts';
@@ -25,3 +25,5 @@ export { nextId, allRuleIds, accountRangeOf, dragOptions, applyDrag, createBlank
 export * from './graph/methodView.ts';
 export { connectInCycle } from './edit/rules.ts';
 export * from './edit/relations.ts';
+export * from './graph/sankey.ts';
+export * from './io/settings.ts';

@@ -2,10 +2,10 @@
 import type { RuleKind, ViewMethod } from '@alloc-sim/engine';
 import { create } from 'zustand';
 
-export type Screen = 'main' | 'master' | 'postings';
+export type Screen = 'main' | 'master' | 'postings' | 'compare' | 'io';
 export type DetailTab = 'table' | 'journal' | 'lineage';
 export type SideTab = 'rules' | 'issues' | 'totals';
-export type FlowViewKind = 'ALL' | ViewMethod;
+export type FlowViewKind = 'ALL' | 'SANKEY' | ViewMethod;
 export type FlowLayout = 'auto' | 'columns';
 export interface RuleRef {
   kind: RuleKind;
@@ -29,6 +29,10 @@ interface UiState {
   flowLayout: FlowLayout;
   /** 手法別ビューで表示しているサイクル */
   methodFocus: Partial<Record<ViewMethod, string>>;
+  /** 比較画面の2案と、サンキー図に入れるステップ（null はすべて） */
+  compareA: string | null;
+  compareB: string | null;
+  sankeySteps: string[] | null;
   presentation: boolean;
   set: (patch: Partial<Omit<UiState, 'set'>>) => void;
 }
@@ -45,6 +49,9 @@ export const useUiStore = create<UiState>()((set) => ({
   flowView: 'ALL',
   flowLayout: 'auto',
   methodFocus: {},
+  compareA: null,
+  compareB: null,
+  sankeySteps: null,
   presentation: false,
   set: (patch) => set(patch),
 }));

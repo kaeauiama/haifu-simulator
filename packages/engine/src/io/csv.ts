@@ -3,8 +3,9 @@
  * 列：仕訳ID, 勘定, 対象種類, 対象ID, 金額, テキスト（英語の見出し id, account, objType, objId, amount, text も読める）。
  * 金額は借方+、貸方−。桁区切りのカンマは読める。書き出しは Excel で開けるよう BOM 付き UTF-8・CRLF。
  */
+import type { MasterIndex } from '../ledger/masterIndex.ts';
 import { PrimaryPostingSchema } from '../model/schema.ts';
-import type { PrimaryPosting } from '../model/types.ts';
+import type { Ledger, PrimaryPosting } from '../model/types.ts';
 
 export const POSTING_CSV_HEADER = ['仕訳ID', '勘定', '対象種類', '対象ID', '金額', 'テキスト'] as const;
 
@@ -122,4 +123,29 @@ export function postingsFromCsv(text: string): { postings: PrimaryPosting[]; err
     postings.push(r.data);
   });
   return { postings, errors };
+}
+
+const ROLE = { PRIMARY: '一次', SENDER: '送信', RECEIVER: '受信' } as const;
+
+/** 締めで作った仕訳の CSV（F9-04）。一次仕訳も含め、台帳の並びのまま書き出す */
+export function journalToCsv(ledger: Ledger, mi: MasterIndex, stepName: (id: string) => string): string {
+  return toCsv([
+    ['行ID', 'ステップ', '伝票', 'ルール', 'ルールの行', '区分', '対象種類', '対象ID', '対象名', '相手', '勘定', '勘定名', '利益センタ', '金額'],
+    ...ledger.map((l) => [
+      l.id,
+      stepName(l.stepId),
+      l.docId,
+      l.origin.ruleId,
+      l.origin.rowId ?? '',
+      ROLE[l.role],
+      l.obj.type,
+      l.obj.id,
+      mi.name(l.obj),
+      l.partner ? `${l.partner.type}:${l.partner.id}` : '',
+      l.account,
+      mi.accounts.get(l.account)?.name ?? '',
+      l.profitCenter,
+      String(l.amount),
+    ]),
+  ]);
 }

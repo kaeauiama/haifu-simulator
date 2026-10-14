@@ -110,9 +110,9 @@ export function useEngineSync(): void {
 
   // 手法別ビューは、開いているときだけ作る
   const flowView = useUiStore((s) => s.flowView);
-  const focus = useUiStore((s) => (s.flowView === 'ALL' ? null : (s.methodFocus[s.flowView] ?? null)));
+  const focus = useUiStore((s) => (s.flowView === 'ALL' || s.flowView === 'SANKEY' ? null : (s.methodFocus[s.flowView] ?? null)));
   useEffect(() => {
-    if (version < 0 || flowView === 'ALL') return;
+    if (version < 0 || flowView === 'ALL' || flowView === 'SANKEY') return;
     let cancelled = false;
     void engine.methodView(version, flowView, stepId, focus).then((v) => {
       if (!cancelled && v) useRunStore.setState({ methodView: v });

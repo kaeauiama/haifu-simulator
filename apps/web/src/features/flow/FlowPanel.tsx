@@ -7,8 +7,9 @@ import { ja } from '@/i18n/ja';
 import { useUiStore, type FlowLayout, type FlowViewKind } from '@/store/ui';
 import { FlowView } from './FlowView';
 import { MethodView } from './MethodView';
+import { SankeyView } from '../compare/SankeyView';
 
-const VIEWS: FlowViewKind[] = ['ALL', ...VIEW_METHODS];
+const VIEWS: FlowViewKind[] = ['ALL', 'SANKEY', ...VIEW_METHODS];
 const LAYOUTS: FlowLayout[] = ['auto', 'columns'];
 
 export function FlowPanel() {
@@ -34,7 +35,7 @@ export function FlowPanel() {
           </div>
         )}
       </div>
-      <div className="min-h-0 flex-1">{view === 'ALL' ? <FlowView /> : <MethodView />}</div>
+      <div className="min-h-0 flex-1">{view === 'ALL' ? <FlowView /> : view === 'SANKEY' ? <SankeyView /> : <MethodView />}</div>
     </div>
   );
 }

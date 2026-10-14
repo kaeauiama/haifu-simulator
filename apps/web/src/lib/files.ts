@@ -1,7 +1,11 @@
 /** 手元のファイルとの受け渡し（ブラウザ内で完結し、外には送らない） */
 
 export function downloadText(filename: string, text: string, mime: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  downloadBlob(filename, new Blob([text], { type: mime }));
+}
+
+export function downloadBlob(filename: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;

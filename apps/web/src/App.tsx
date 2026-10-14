@@ -2,7 +2,9 @@ import { useEffect } from 'react';
 import { DialogHost } from '@/components/dialogs';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { MainScreen } from '@/features/MainScreen';
+import { CompareScreen } from '@/features/compare/CompareScreen';
 import { Header } from '@/features/header/Header';
+import { IoScreen } from '@/features/io/IoScreen';
 import { MasterScreen } from '@/features/master/MasterScreen';
 import { PostingsScreen } from '@/features/postings/PostingsScreen';
 import { redo, undo } from '@/store/project';
@@ -39,6 +41,8 @@ export function App() {
           {screen === 'main' && <MainScreen />}
           {screen === 'master' && <MasterScreen />}
           {screen === 'postings' && <PostingsScreen />}
+          {screen === 'compare' && <CompareScreen />}
+          {screen === 'io' && <IoScreen />}
         </main>
       </div>
       <DialogHost />
