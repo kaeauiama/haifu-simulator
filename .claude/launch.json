@@ -28,6 +28,24 @@
         "--strictPort"
       ],
       "port": 4173
+    },
+    {
+      "name": "web-pages",
+      "runtimeExecutable": "corepack",
+      "runtimeArgs": [
+        "pnpm",
+        "--filter",
+        "@alloc-sim/web",
+        "exec",
+        "vite",
+        "preview",
+        "--base",
+        "/haifu-simulator/",
+        "--port",
+        "4180",
+        "--strictPort"
+      ],
+      "port": 4180
     }
   ]
 }
